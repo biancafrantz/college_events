@@ -1,1 +1,1 @@
-"# COP4710 College Event Website" 
+**COP4710 College Event Website**
