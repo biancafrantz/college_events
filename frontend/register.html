@@ -1,0 +1,19 @@
+<form action="../auth/register.php" method="POST">
+    Name: <input type="text" name="Name" required><br>
+    Email: <input type="email" name="Email" required><br>
+    UserType:
+    <select name="UserType">
+        <option value="Student">Student</option>
+        <option value="Admin">Admin</option>
+        <option value="SuperAdmin">Super Admin</option>
+    </select>
+    <br>
+    Password: <input type="password" name="Password" required><br>
+    <input type="submit" value="Register">
+</form>
+
+<p>Already have an account? 
+    <a href="login.html">
+        <button type="button">Login</button>
+    </a>
+</p>
