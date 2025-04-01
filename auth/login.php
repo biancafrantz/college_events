@@ -42,3 +42,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 ?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+</head>
+<body>
+    <h2>Login</h2>
+    <form action="../auth/login.php" method="POST">
+        Email: <input type="email" name="Email" required><br>
+        Password: <input type="password" name="Password" required><br>
+        <input type="submit" value="Login">
+    </form>
+
+    <p>Don't have an account? 
+        <a href="register.php">
+            <button type="button">Register</button>
+        </a>
+    </p>
+</body>
+</html>
