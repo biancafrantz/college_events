@@ -1,1 +1,3 @@
-"<?php echo 'CI/CD Deployment Works!'; ?>" 
+<?php
+header("Location: auth/login.php");
+exit();
