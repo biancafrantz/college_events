@@ -1,3 +1,3 @@
 <?php
-header("Location: auth/login.php");
+header("Location: COP4710_termProject/auth/login.php");
 exit();

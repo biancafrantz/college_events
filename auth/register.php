@@ -1,5 +1,5 @@
 <?php
-include '../db_connect.php'; // Include database connection
+include $_SERVER['DOCUMENT_ROOT'] . '/COP4710_termProject/db_connect.php';
 
 $message = ""; // To store success or error message
 

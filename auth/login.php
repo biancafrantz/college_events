@@ -1,6 +1,6 @@
 <?php
 session_start();
-include '../db_connect.php';
+include $_SERVER['DOCUMENT_ROOT'] . '/COP4710_termProject/db_connect.php';
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -52,7 +52,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body>
     <h2>Login</h2>
-    <form action="../auth/login.php" method="POST">
+    <form action="login.php" method="POST">
         Email: <input type="email" name="Email" required><br>
         Password: <input type="password" name="Password" required><br>
         <input type="submit" value="Login">
