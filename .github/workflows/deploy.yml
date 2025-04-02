@@ -20,6 +20,6 @@ jobs:
           username: ${{ secrets.DROPLET_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
-            cd /var/www/html/COP4710_termProject
+            cd /var/www/html
             git pull origin main
             sudo systemctl restart apache2
