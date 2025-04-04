@@ -41,6 +41,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register</title>
+    <link rel="stylesheet" href="../assets/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         .message {
             padding: 10px;
@@ -53,31 +55,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </style>
 </head>
 <body>
-    <h2>Register</h2>
+    <div class="centered-form">
+        <h2>Register</h2>
 
-    <!-- Display Messages -->
-    <?php if (!empty($message)): ?>
-        <div class="message <?= strpos($message, 'Error') !== false ? 'error' : 'success' ?>">
-            <?= $message ?>
-        </div>
-    <?php endif; ?>
+        <!-- Display Messages -->
+        <?php if (!empty($message)): ?>
+            <div class="message <?= strpos($message, 'Error') !== false ? 'error' : 'success' ?>">
+                <?= $message ?>
+            </div>
+        <?php endif; ?>
 
-    <form action="register.php" method="POST">
-        Name: <input type="text" name="Name" required><br>
-        Email: <input type="email" name="Email" required><br>
-        UserType:
-        <select name="UserType">
-            <option value="Student">Student</option>
-            <option value="Admin">Admin</option>
-            <option value="SuperAdmin">Super Admin</option>
-        </select>
-        <br>
-        Password: <input type="password" name="Password" required><br>
-        <input type="submit" value="Register">
-    </form>
+        <form action="register.php" method="POST">
+            <input type="text" name="Name" placeholder="Name" required>
+            <input type="email" name="Email" placeholder="Email" required>
+            <input type="password" name="Password" placeholder="Password" required>
+            <select name="UserType" required>
+                <option value="" disabled selected>Select User Type</option>
+                <option value="Student">Student</option>
+                <option value="Admin">Admin</option>
+                <option value="SuperAdmin">Super Admin</option>
+            </select>
+            <input type="submit" value="Register">
+        </form>
 
-    <p>Already have an account? 
-        <a href="login.php"><button type="button">Login</button></a>
-    </p>
+        <p>Already have an account?</p>
+        <a href="login.php">
+            <button type="button">Login</button>
+        </a>
+    </div>
 </body>
+
 </html>

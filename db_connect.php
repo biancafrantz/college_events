@@ -1,7 +1,7 @@
 <?php
 $servername = "104.248.123.245"; 
-$username = "wamp_user1"; 
-$password = "TermProject1!"; 
+$username = "brandon"; 
+$password = "Password123!"; 
 $dbname = "COP4710"; 
 
 // Create connection

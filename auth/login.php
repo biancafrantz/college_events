@@ -49,19 +49,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
+    <link rel="stylesheet" href="../assets/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+<div class="centered-form">
     <h2>Login</h2>
     <form action="../auth/login.php" method="POST">
-        Email: <input type="email" name="Email" required><br>
-        Password: <input type="password" name="Password" required><br>
+        <input type="email" name="Email" placeholder="Email" required>
+        <input type="password" name="Password" placeholder="Password" required>
         <input type="submit" value="Login">
     </form>
+    <p>Don't have an account?</p>
+    <a href="register.php">
+        <button type="button">Register</button>
+    </a>
+</div>
 
-    <p>Don't have an account? 
-        <a href="register.php">
-            <button type="button">Register</button>
-        </a>
-    </p>
 </body>
+
 </html>

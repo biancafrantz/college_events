@@ -1,0 +1,142 @@
+/* Reset & global layout */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', sans-serif;
+    background-image: url('wallpaper.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-position: center;
+}
+
+/* General layout padding (used in dashboards) */
+body {
+    margin: 20px;
+}
+
+/* Buttons */
+button {
+    font-family: 'Roboto', sans-serif;
+    background-color: #ffffff;
+    color: rgb(0, 0, 0);
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #e6e7ee;
+}
+
+/* Toggleable sections */
+.section {
+    display: none;
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border: 1px solid #ccc;
+}
+
+/* Event or university card */
+.card {
+    display: flex;
+    align-items: center;
+    border: 1px solid #ccc;
+    margin-bottom: 15px;
+    padding: 12px;
+    border-radius: 8px;
+    background-color: #e6e7ee;
+    cursor: pointer;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.card:hover {
+    background-color: #e6e6f0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Detail box shown on card click */
+.detail {
+    display: none;
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 15px;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+/* Login/Register centered form */
+.centered-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    text-align: center;
+}
+
+.centered-form form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+
+.centered-form h2 {
+    margin-bottom: 20px;
+}
+
+/* Styled form inputs in centered-form */
+.centered-form input[type="text"],
+.centered-form input[type="email"],
+.centered-form input[type="password"],
+.centered-form input[type="submit"] {
+    width: 300px;
+    margin: 10px 0;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Login/Register submit button */
+.centered-form input[type="submit"] {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.centered-form input[type="submit"]:hover {
+    background-color: #45a049;
+}
+
+/* Register link block */
+.centered-form p {
+    margin-top: 20px;
+}
+
+.centered-form a button {
+    margin-top: 10px;
+}
+
+.centered-form select {
+    width: 300px;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 16px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
