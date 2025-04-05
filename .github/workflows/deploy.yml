@@ -22,4 +22,9 @@ jobs:
           script: |
             cd /var/www/html
             git pull origin main
+
+            # Create .env file with API key (overwrite or create)
+            echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API }}" > .env
+
+            # Restart Apache
             sudo systemctl restart apache2
