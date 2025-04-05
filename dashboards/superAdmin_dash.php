@@ -15,7 +15,39 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'SuperAdmin') {
     <title>Super Admin Dashboard</title>
     <link rel="stylesheet" href="../assets/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-   
+    <style>
+      
+        .section { display: none; margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; background: #fefefe; }
+        .card {
+            display: flex;
+            align-items: center;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .card:hover { background-color: #f9f9f9; }
+        .card-image {
+            width: 120px;
+            height: 80px;
+            margin-right: 15px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .detail {
+            display: none;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            background: #fefefe;
+        }
+        .actions { margin-top: 10px; }
+        input, select, textarea { width: 100%; padding: 5px; margin: 5px 0; }
+        button.toggle { margin: 5px 10px 0 0; }
+    </style>
     <script>
         function toggleSection(id) {
             const section = document.getElementById(id);

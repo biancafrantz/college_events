@@ -3,23 +3,31 @@ name: Deploy to DigitalOcean Droplet
 on:
   push:
     branches:
-      - main  # Runs when changes are pushed to 'main' branch
+      
+main  # Runs when changes are pushed to 'main' branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      
+name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Deploy to Droplet
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.DROPLET_IP }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          script: |
-            cd /var/www/html
-            git pull origin main
+      
+name: Deploy to Droplet
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.DROPLET_IP }}
+        username: ${{ secrets.DROPLET_USER }}
+        key: ${{ secrets.DROPLET_SSH_KEY }}
+        script: |
+          cd /var/www/html
+          git pull origin main
+
+            # Create .env file with API key (overwrite or create)
+            echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API }}" > .env
+
+            # Restart Apache
             sudo systemctl restart apache2

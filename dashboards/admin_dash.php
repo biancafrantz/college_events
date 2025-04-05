@@ -1,12 +1,49 @@
-
-
-
 <?php
 session_start();
 if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Admin') {
     header("Location: ../auth/login.php");
     exit();
 }
+
+include '../db_connect.php';
+
+$adminID = $_SESSION['UID'];
+
+// Get RSOs where this admin is a member
+$rsos_query = $conn->prepare("
+    SELECT RSO_ID, RSO_Name
+    FROM RSOs
+    WHERE Admin_ID = ?
+");
+
+$rsos_query->bind_param("i", $adminID);
+$rsos_query->execute();
+$rsos_result = $rsos_query->get_result();
+
+$rsos = [];
+while ($row = $rsos_result->fetch_assoc()) {
+    $rsoID = $row['RSO_ID'];
+
+    $members_query = $conn->prepare("
+        SELECT U.Email
+        FROM Users U
+        JOIN RSO_Membership M ON U.UID = M.UID
+        WHERE M.RSO_ID = ?
+    ");
+    $members_query->bind_param("i", $rsoID);
+    $members_query->execute();
+    $members_result = $members_query->get_result();
+
+    $members = [];
+    while ($m = $members_result->fetch_assoc()) {
+        $members[] = $m['Email'];
+    }
+
+    $row['Members'] = $members;
+    $rsos[] = $row;
+}
+
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -15,13 +52,11 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Admin') {
     <title>Admin Dashboard</title>
     <link rel="stylesheet" href="../assets/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
     <script>
         function toggleSection(id) {
             const section = document.getElementById(id);
             section.style.display = section.style.display === 'block' ? 'none' : 'block';
         }
-
         function toggleDetail(id) {
             const detail = document.getElementById(id);
             detail.style.display = detail.style.display === 'block' ? 'none' : 'block';
@@ -85,36 +120,30 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Admin') {
     <!-- Manage RSOs Section -->
     <div id="manage-rsos" class="section">
         <h3>Manage My RSOs</h3>
-        <div class="card" onclick="toggleDetail('rso1-detail')">
-            <img src="https://via.placeholder.com/120x80?text=ISA" class="card-image">
-            <div>
-                <h4>ISA</h4>
-                <p>You are the admin</p>
-            </div>
-        </div>
-        <div id="rso1-detail" class="detail">
-            <p><strong>Description:</strong> Info Systems Association</p>
-            <h4>Pending Join Requests</h4>
-            <ul>
-                <li>student1@ucf.edu <button>Approve</button> <button>Deny</button></li>
-                <li>student2@ucf.edu <button>Approve</button> <button>Deny</button></li>
-            </ul>
-        </div>
-    </div>
 
-    <!-- Create RSO Section -->
-    <div id="create-rso" class="section">
-        <h3>Create New RSO</h3>
-        <form>
-            <input type="text" placeholder="RSO Name">
-            <textarea placeholder="RSO Description"></textarea>
-            <input type="email" placeholder="Member Email 1">
-            <input type="email" placeholder="Member Email 2">
-            <input type="email" placeholder="Member Email 3">
-            <input type="email" placeholder="Member Email 4">
-            <input type="email" placeholder="Member Email 5">
-            <button>Create RSO</button>
-        </form>
+        <?php foreach ($rsos as $rso): ?>
+            <div class="card" onclick="toggleDetail('rso-detail-<?= $rso['RSO_ID'] ?>')">
+                <img src="https://via.placeholder.com/120x80?text=<?= urlencode($rso['RSO_Name']) ?>" class="card-image">
+                <div>
+                    <h4><?= htmlspecialchars($rso['RSO_Name']) ?></h4>
+                    <p>You are the admin</p>
+                </div>
+            </div>
+            <div id="rso-detail-<?= $rso['RSO_ID'] ?>" class="detail">
+                <h4>Members</h4>
+                <ul>
+                    <?php foreach ($rso['Members'] as $email): ?>
+                        <li><?= htmlspecialchars($email) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+
+                <h4>Pending Join Requests</h4>
+                <ul>
+                    <li>student1@ucf.edu <button>Approve</button> <button>Deny</button></li>
+                    <li>student2@ucf.edu <button>Approve</button> <button>Deny</button></li>
+                </ul>
+            </div>
+        <?php endforeach; ?>
     </div>
 
     <!-- View All Events Section -->
