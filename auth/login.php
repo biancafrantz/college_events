@@ -9,18 +9,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $Email = $_POST['Email'];
     $PasswordInput = $_POST['Password'];
 
-    $stmt = $conn->prepare("SELECT UID, Password, UserType FROM Users WHERE Email = ?");
+    $stmt = $conn->prepare("SELECT UID, Password, UserType, Email FROM Users WHERE Email = ?");
     $stmt->bind_param("s", $Email);
     $stmt->execute();
     $stmt->store_result();
 
     if ($stmt->num_rows > 0) {  // Move fetch inside this block
-        $stmt->bind_result($UID, $HashedPassword, $UserType);
+        $stmt->bind_result($UID, $HashedPassword, $UserType, $EmailFetched);
         $stmt->fetch();
 
         if (password_verify($PasswordInput, $HashedPassword)) {
             $_SESSION['UID'] = $UID;
             $_SESSION['UserType'] = $UserType;
+            $_SESSION['Email'] = $EmailFetched;
 
             // Debug output to confirm before redirect
             echo "Redirecting UserType: $UserType...<br>";

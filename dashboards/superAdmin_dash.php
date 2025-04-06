@@ -71,10 +71,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createUniversity'])) 
                 if ($stmt) {
                     $stmt->bind_param("sssiss", $Name, $Address, $Description, $NumStudents, $Pictures, $EmailDomain);
                     if ($stmt->execute()) {
+                        $newUniversityID = $stmt->insert_id;
                         $successMessage = "University successfully created.";
+                    
+                        // Update users with matching email domains
+                        $domainLike = '%' . '@' . $EmailDomain;
+                        $updateStmt = $conn->prepare("UPDATE Users SET UniversityID = ? WHERE UniversityID IS NULL AND Email LIKE ?");
+                        if ($updateStmt) {
+                            $updateStmt->bind_param("is", $newUniversityID, $domainLike);
+                            $updateStmt->execute();
+                            $updateStmt->close();
+                        }
                     } else {
                         $errorMessage = "University insert error: " . $stmt->error;
-                    }
+                    }                    
                     $stmt->close();
                 } else {
                     $errorMessage = "University insert error: " . $conn->error;
@@ -249,9 +259,9 @@ if ($result && $result->num_rows > 0) {
             </div>
         <?php endforeach; ?>
     </div>
-<script
-    src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
-    async defer></script>
+    <script
+        src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
+        async defer></script>
 <script>
     let map, marker, geocoder, autocomplete;
 

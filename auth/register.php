@@ -10,7 +10,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $UserType = $_POST['UserType'];
         $Password = password_hash($_POST['Password'], PASSWORD_DEFAULT);
 
-        // Check if email is already in use
+        // Extract email domain
+        $emailParts = explode('@', $Email);
+        $emailDomain = isset($emailParts[1]) ? strtolower($emailParts[1]) : null;
+
+        // Default to NULL university
+        $universityID = null;
+
+        if ($emailDomain) {
+            // Try to find matching university
+            $uni_stmt = $conn->prepare("SELECT UniversityID FROM Universities WHERE LOWER(EmailDomain) = ?");
+            $uni_stmt->bind_param("s", $emailDomain);
+            $uni_stmt->execute();
+            $uni_result = $uni_stmt->get_result();
+
+            if ($uni_result->num_rows > 0) {
+                $uni_row = $uni_result->fetch_assoc();
+                $universityID = $uni_row['UniversityID'];
+            }
+        }
+
+        // Check if email already exists
         $check_stmt = $conn->prepare("SELECT Email FROM Users WHERE Email = ?");
         $check_stmt->bind_param("s", $Email);
         $check_stmt->execute();
@@ -19,9 +39,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($check_stmt->num_rows > 0) {
             $message = "Error: This email is already registered!";
         } else {
-            // Insert new user
-            $stmt = $conn->prepare("INSERT INTO Users (Name, Email, UserType, Password) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("ssss", $Name, $Email, $UserType, $Password);
+            // Insert user with UniversityID (can be NULL)
+            $stmt = $conn->prepare("INSERT INTO Users (Name, Email, UserType, Password, UniversityID) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssi", $Name, $Email, $UserType, $Password, $universityID);
 
             if ($stmt->execute()) {
                 $message = "Registration successful! You can now <a href='login.php'>login</a>.";
