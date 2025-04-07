@@ -13,6 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = $_POST["phone"];
     $lname = $_POST["lname"];
     $address = $_POST["address"];
+    $roomNumber = trim($_POST["room_number"] ?? '');
+if (!empty($roomNumber)) {
+    $address .= " Room $roomNumber";
+}
     $latitude = $_POST["latitude"];
     $longitude = $_POST["longitude"];
     $rsoID = $_POST['rso'] ?? null;

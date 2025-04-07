@@ -1,7 +1,7 @@
 <?php
-$servername = "104.248.123.245"; // Change to secret??
-$username = "wamp_user1"; // Change to secret??
-$password = "TermProject1!"; // Change to secret??
+$servername = "104.248.123.245"; 
+$username = "brandon"; 
+$password = "Password123!"; 
 $dbname = "COP4710"; 
 
 // Create connection

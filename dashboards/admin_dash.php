@@ -9,9 +9,115 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Admin') {
 
 $adminID = $_SESSION['UID'];
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_event'])) {
+    $eventID = intval($_POST['event_id']);
+    $name = trim($_POST['event_name']);
+    $desc = trim($_POST['event_desc']);
+    $date = $_POST['event_date'];
+    $start = $_POST['start_time'];
+    $end = $_POST['end_time'];
+
+    $stmt = $conn->prepare("UPDATE Events SET Event_Name = ?, Description = ?, Event_Date = ?, Start_Time = ?, End_Time = ? WHERE Event_ID = ?");
+    $stmt->bind_param("sssssi", $name, $desc, $date, $start, $end, $eventID);
+    $stmt->execute();
+    $stmt->close();
+
+    header("Location: admin_dash.php?event_updated=1");
+    exit();
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_rso'])) {
+    $rsoID = intval($_POST['rso_id']);
+
+    // Delete all associated events first
+    $conn->query("DELETE e FROM Events e JOIN RSO_Events re ON e.Event_ID = re.Event_ID WHERE re.RSO_ID = $rsoID");
+
+    // Delete from RSO_Events (in case events still exist somehow)
+    $conn->query("DELETE FROM RSO_Events WHERE RSO_ID = $rsoID");
+
+    // Delete RSO memberships
+    $conn->query("DELETE FROM RSO_Membership WHERE RSO_ID = $rsoID");
+
+    // Finally, delete the RSO itself
+    $conn->query("DELETE FROM RSOs WHERE RSO_ID = $rsoID");
+
+    header("Location: admin_dash.php?rso_deleted=1");
+    exit();
+}
+
+
+
+$eventID = 1;
+$comments = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['submit_comment'])) {
+        $eventID = $_POST['event_id'];
+        $text = trim($_POST['comment_text']);
+        $rating = intval($_POST['rating']);
+        if ($text !== '' && $rating >= 1 && $rating <= 5) {
+            $stmt = $conn->prepare("INSERT INTO Comments (Event_ID, UID, Text, Rating) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("iisi", $eventID, $_SESSION['UID'], $text, $rating);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+
+    if (isset($_POST['edit_comment']) && isset($_POST['comment_text'])) {
+        $commentID = $_POST['comment_id'];
+        $text = trim($_POST['comment_text']);
+        $rating = intval($_POST['rating']);
+        $stmt = $conn->prepare("UPDATE Comments SET Text = ?, Rating = ? WHERE Comment_ID = ? AND UID = ?");
+        $stmt->bind_param("siii", $text, $rating, $commentID, $_SESSION['UID']);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    if (isset($_POST['delete_comment'])) {
+        $commentID = $_POST['comment_id'];
+        $stmt = $conn->prepare("DELETE FROM Comments WHERE Comment_ID = ? AND UID = ?");
+        $stmt->bind_param("ii", $commentID, $_SESSION['UID']);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    if (isset($_POST['delete_event'])) {
+        $eventID = intval($_POST['event_id']);
+    
+        // Delete from Event type table first
+        $conn->query("DELETE FROM Public_Events WHERE Event_ID = $eventID");
+        $conn->query("DELETE FROM Private_Events WHERE Event_ID = $eventID");
+        $conn->query("DELETE FROM RSO_Events WHERE Event_ID = $eventID");
+    
+        // Delete associated comments
+        $conn->query("DELETE FROM Comments WHERE Event_ID = $eventID");
+    
+        // Delete from main Events table
+        $conn->query("DELETE FROM Events WHERE Event_ID = $eventID");
+    
+        header("Location: admin_dash.php?event_deleted=1");
+        exit();
+    }
+    
+}
+
+$stmt = $conn->prepare("
+    SELECT c.Comment_ID, c.Text, c.Rating, c.UID, u.Name
+    FROM Comments c
+    JOIN Users u ON c.UID = u.UID
+    WHERE c.Event_ID = ?
+    ORDER BY c.Timestamp DESC
+");
+$stmt->bind_param("i", $eventID);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) $comments[] = $row;
+$stmt->close();
+
+
 // Get RSOs where this admin is a member
 $rsos_query = $conn->prepare("
-    SELECT RSO_ID, RSO_Name
+    SELECT RSO_ID, RSO_Name, Description
     FROM RSOs
     WHERE Admin_ID = ?
 ");
@@ -55,6 +161,55 @@ $email_result = $email_query->get_result();
 $email_row = $email_result->fetch_assoc();
 $adminEmail = $email_row['Email'];
 
+// Get Public Events created by this admin
+$publicEventsStmt = $conn->prepare("
+    SELECT e.*, l.address, 'Public' AS Type
+FROM Events e
+JOIN Location l ON e.lname = l.lname
+    JOIN Public_Events pe ON e.Event_ID = pe.Event_ID
+    WHERE pe.Admin_ID = ?
+");
+$publicEventsStmt->bind_param("i", $adminID);
+$publicEventsStmt->execute();
+$publicResult = $publicEventsStmt->get_result();
+$publicEvents = $publicResult->fetch_all(MYSQLI_ASSOC);
+$publicEventsStmt->close();
+
+// Get Private Events created by this admin
+$privateEventsStmt = $conn->prepare("
+    SELECT e.*, l.address, 'Public' AS Type
+FROM Events e
+JOIN Location l ON e.lname = l.lname
+    JOIN Private_Events pr ON e.Event_ID = pr.Event_ID
+    WHERE pr.Admin_ID = ?
+");
+$privateEventsStmt->bind_param("i", $adminID);
+$privateEventsStmt->execute();
+$privateResult = $privateEventsStmt->get_result();
+$privateEvents = $privateResult->fetch_all(MYSQLI_ASSOC);
+$privateEventsStmt->close();
+
+// Get RSO Events managed by this admin
+$rsoEventsStmt = $conn->prepare("
+    SELECT e.*, l.address, 'Public' AS Type
+FROM Events e
+JOIN Location l ON e.lname = l.lname
+    JOIN RSO_Events re ON e.Event_ID = re.Event_ID
+    JOIN RSOs r ON re.RSO_ID = r.RSO_ID
+    WHERE r.Admin_ID = ?
+");
+$rsoEventsStmt->bind_param("i", $adminID);
+$rsoEventsStmt->execute();
+$rsoResult = $rsoEventsStmt->get_result();
+$rsoEvents = $rsoResult->fetch_all(MYSQLI_ASSOC);
+$rsoEventsStmt->close();
+
+// Merge all into one array
+$myEvents = array_merge($publicEvents, $privateEvents, $rsoEvents);
+$myCreatedEvents = $myEvents;
+
+
+
 ?>
 
 <!DOCTYPE html>
@@ -73,6 +228,34 @@ $adminEmail = $email_row['Email'];
             const detail = document.getElementById(id);
             detail.style.display = detail.style.display === 'block' ? 'none' : 'block';
         }
+
+        function showSection(id) {
+    const section = document.getElementById(id);
+    const currentlyVisible = section.style.display === 'block';
+
+    document.querySelectorAll('.section').forEach(div => div.style.display = 'none');
+
+    if (!currentlyVisible) {
+        section.style.display = 'block';
+        localStorage.setItem('activeTab', id);
+        localStorage.setItem('tabOpen', 'true');
+    } else {
+        section.style.display = 'none';
+        localStorage.setItem('activeTab', id);
+        localStorage.setItem('tabOpen', 'false');
+    }
+}
+
+window.onload = function () {
+    const tab = localStorage.getItem('activeTab');
+    const tabOpen = localStorage.getItem('tabOpen');
+
+    if (tab && tabOpen === 'true') {
+        const section = document.getElementById(tab);
+        if (section) section.style.display = 'block';
+    }
+};
+
     </script>
 </head>
 
@@ -105,7 +288,7 @@ button, input, select, textarea {
 }
 
 button {
-    background-color:rgb(195, 205, 233);
+    background-color:#c3cde9;
     color: black;
     font-weight: bold;
     cursor: pointer;
@@ -244,15 +427,71 @@ textarea {
   <button class="toggle" onclick="toggleSection('create-event')">Create New Event</button>
   <button class="toggle" onclick="toggleSection('manage-events')">Manage My Events</button>
   <button class="toggle" onclick="toggleSection('manage-rsos')">Manage My RSOs</button>
-  <button class="toggle" onclick="toggleSection('create-rso')">Create New RSO</button>
+  <button class="toggle" onclick="toggleSection('upcoming-events')">Upcoming Events</button>
   <button class="toggle" onclick="toggleSection('view-all-events')">View All Events</button>
+ 
+
+
 </div>
 
 <?php if (isset($_GET['event_status']) && $_GET['event_status'] === 'success'): ?>
-    <div style="background-color: #d4edda; color: #155724; padding: 12px 20px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 20px;">
-        ✅ Event created successfully!
-    </div>
+  <div id="event-created-msg" style="background-color: #d4edda; color: #155724; padding: 12px 20px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 20px; text-align: center;">
+    ✅ Event created successfully!
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const msg = document.getElementById('event-created-msg');
+      if (msg) {
+        setTimeout(() => {
+          msg.style.display = 'none';
+          const url = new URL(window.location);
+          url.searchParams.delete('event_status');
+          window.history.replaceState({}, document.title, url.toString());
+        }, 4000);
+      }
+    });
+  </script>
 <?php endif; ?>
+
+
+<?php if (isset($_GET['event_deleted']) && $_GET['event_deleted'] == 1): ?>
+  <div id="event-deleted-msg" style="background-color: #cde9da; color: #c3cde9; padding: 12px 20px; border-radius: 8px; border: 1px solid #f5c6cb; margin-bottom: 20px; text-align: center;">
+    🗑️ Event deleted successfully.
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const msg = document.getElementById('event-deleted-msg');
+      if (msg) {
+        setTimeout(() => {
+          msg.style.display = 'none';
+          const url = new URL(window.location);
+          url.searchParams.delete('event_deleted');
+          window.history.replaceState({}, document.title, url.toString());
+        }, 4000);
+      }
+    });
+  </script>
+<?php endif; ?>
+
+<?php if (isset($_GET['rso_deleted']) && $_GET['rso_deleted'] == 1): ?>
+  <div id="rso-deleted-msg" style="background-color: #f8d7da; color: #721c24; padding: 12px 20px; border-radius: 8px; border: 1px solid #f5c6cb; margin-bottom: 20px; text-align: center;">
+    🗑️ RSO deleted successfully.
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const msg = document.getElementById('rso-deleted-msg');
+      if (msg) {
+        setTimeout(() => {
+          msg.style.display = 'none';
+          const url = new URL(window.location);
+          url.searchParams.delete('rso_deleted');
+          window.history.replaceState({}, document.title, url.toString());
+        }, 4000);
+      }
+    });
+  </script>
+<?php endif; ?>
+
 
     <!-- Create Event Section -->
     <div id="create-event" class="section">
@@ -294,6 +533,11 @@ textarea {
         <div id="map" style="width: 100%; height: 300px; border-radius: 10px; margin-bottom: 10px;"></div>
 
         <input id="address" type="text" placeholder="Address" name="address">
+        <label style="display: flex; align-items: center; gap: 8px;">
+  <input type="checkbox" id="roomToggle" onchange="toggleRoomInput()"> Include Room Number
+</label>
+<input id="room_number" type="text" name="room_number" placeholder="Room Number" style="display:none;">
+
         <input id="latitude" type="text" placeholder="Latitude" name="latitude">
         <input id="longitude" type="text" placeholder="Longitude" name="longitude">
 
@@ -303,94 +547,181 @@ textarea {
   </div>
 </div>
 
-    <!-- Manage Events Section -->
-    <div id="manage-events" class="section">
-    <div class="event-wrapper">
-    <div class="section-glass">
-        <h3>Manage My Events</h3>
-        <div class="card" onclick="toggleDetail('event1-detail')">
-            <img src="https://via.placeholder.com/120x80?text=Career+Fair" class="card-image">
+<!-- Manage Events Section -->
+<div id="manage-events" class="section">
+<div class="event-wrapper">
+<div class="section-glass">
+    <h3>Manage My Events</h3>
+
+    <?php if (empty($myCreatedEvents)): ?>
+        <p>You haven’t created any events yet.</p>
+    <?php endif; ?>
+
+    <?php foreach ($myCreatedEvents as $index => $event): ?>
+        <div class="card" onclick="toggleDetail('manage-event<?= $index ?>')">
+            <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
             <div>
-                <h4>Career Fair</h4>
-                <p>Public – May 10, 2025</p>
+                <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
+                <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
             </div>
         </div>
-        <div id="event1-detail" class="detail">
-            <p><strong>Description:</strong> Meet top employers from the region.</p>
-            <button>Edit Event</button> <button>Delete Event</button>
+
+        <div id="manage-event<?= $index ?>" class="detail">
+            <form method="POST">
+                <input type="hidden" name="event_id" value="<?= $event['Event_ID'] ?>">
+                <label>Name: <input type="text" name="event_name" value="<?= htmlspecialchars($event['Event_Name']) ?>"></label><br>
+                <label>Description: <textarea name="event_desc"><?= htmlspecialchars($event['Description']) ?></textarea></label><br>
+                <label>Date: <input type="date" name="event_date" value="<?= $event['Event_Date'] ?>"></label><br>
+                <label>Start Time: <input type="time" name="start_time" value="<?= $event['Start_Time'] ?>"></label><br>
+                <label>End Time: <input type="time" name="end_time" value="<?= $event['End_Time'] ?>"></label><br>
+                <button type="submit" name="update_event">Save Changes</button>
+                <form method="POST" onsubmit="return confirm('Are you sure you want to delete this event?');">
+    <input type="hidden" name="event_id" value="<?= $event['Event_ID'] ?>">
+    <button type="submit" name="delete_event" style="background-color: #c0392b; color: white;">Delete Event</button>
+</form>
+
+            </form>
         </div>
-        </div>
-    </div>
+    <?php endforeach; ?>
 </div>
+</div>
+</div>
+
 
     <!-- Manage RSOs Section -->
     <div id="manage-rsos" class="section">
+  <div class="event-wrapper">
+    <div class="section-glass">
+      <h3>Manage My RSOs</h3>
+
+      <?php foreach ($rsos as $rso): ?>
+        <div class="card" onclick="toggleDetail('rso-detail-<?= $rso['RSO_ID'] ?>')">
+          <img src="https://via.placeholder.com/120x80?text=<?= urlencode($rso['RSO_Name']) ?>" class="card-image">
+          <div>
+            <h4><?= htmlspecialchars($rso['RSO_Name']) ?></h4>
+            <p>You are the admin</p>
+          </div>
+        </div>
+        <div id="rso-detail-<?= $rso['RSO_ID'] ?>" class="detail">
+          <p><strong>Description:</strong> <?= htmlspecialchars($rso['Description'] ?? '') ?>
+          </p>
+          <h4>Members</h4>
+          <ul>
+            <?php foreach ($rso['Members'] as $email): ?>
+              <li><?= htmlspecialchars($email) ?></li>
+            <?php endforeach; ?>
+          </ul>
+          <form method="POST" onsubmit="return confirm('Are you sure you want to delete this RSO and all its data?');">
+    <input type="hidden" name="rso_id" value="<?= $rso['RSO_ID'] ?>">
+    <button type="submit" name="delete_rso" style="background-color:#c0392b; color:white;">Delete RSO</button>
+</form>
+
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</div>
+
+
+    <div id="upcoming-events" class="section" style="display:none; padding-top:20px;">
     <div class="event-wrapper">
     <div class="section-glass">
-        <h3>Manage My RSOs</h3>
+      <div style="display: flex; gap: 40px;">
+        <div style="flex: 1;">
+          <h3>Upcoming Event: Innovation Kickoff</h3>
+          <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+            <input type="hidden" name="event_id" value="<?= $eventID ?>">
+            <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
+            <select name="rating" required>
+              <option value="">Rate</option>
+              <?php for ($i = 1; $i <= 5; $i++): ?>
+                <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+              <?php endfor; ?>
+            </select><br>
+            <button name="submit_comment">Submit</button>
+          </form>
+        </div>
 
-        <?php foreach ($rsos as $rso): ?>
-            <div class="card" onclick="toggleDetail('rso-detail-<?= $rso['RSO_ID'] ?>')">
-                <img src="https://via.placeholder.com/120x80?text=<?= urlencode($rso['RSO_Name']) ?>" class="card-image">
-                <div>
-                    <h4><?= htmlspecialchars($rso['RSO_Name']) ?></h4>
-                    <p>You are the admin</p>
-                </div>
-            </div>
-            <div id="rso-detail-<?= $rso['RSO_ID'] ?>" class="detail">
-                <h4>Members</h4>
-                <ul>
-                    <?php foreach ($rso['Members'] as $email): ?>
-                        <li><?= htmlspecialchars($email) ?></li>
-                    <?php endforeach; ?>
-                </ul>
+        <div style="flex: 1;">
+          <h4>Comments</h4>
+          <?php foreach ($comments as $c): ?>
+            <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
+            <strong><?= htmlspecialchars($c['Name']) ?></strong><br>
+            <?php
+            $filled = str_repeat('⭐', $c['Rating']);
+            $empty = str_repeat('☆', 5 - $c['Rating']);
+            echo "Stars: $filled$empty";
+            ?>
 
-                <h4>Pending Join Requests</h4>
-                <ul>
-                    <li>student1@ucf.edu <button>Approve</button> <button>Deny</button></li>
-                    <li>student2@ucf.edu <button>Approve</button> <button>Deny</button></li>
-                </ul>
+              <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
+                <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen', 'true')">
+                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                  <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
+                  <select name="rating">
+                    <?php for ($i = 1; $i <= 5; $i++): ?>
+                      <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+                    <?php endfor; ?>
+                  </select><br>
+                  <button name="edit_comment">Save</button>
+                </form>
+              <?php else: ?>
+                <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
+                <?php if ($c['UID'] == $_SESSION['UID']): ?>
+                  <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                    <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                    <button name="edit_comment">Edit</button>
+                  </form>
+                  <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                    <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                    <button name="delete_comment">Delete</button>
+                  </form>
+                <?php endif; ?>
+              <?php endif; ?>
             </div>
-        <?php endforeach; ?>
+          <?php endforeach; ?>
+        </div>
+      </div>
     </div>
-    </div>
-    </div>
+  </div>
+</div>
 
     <!-- View All Events Section -->
     <div id="view-all-events" class="section">
     <div class="event-wrapper">
     <div class="section-glass">
         <h3>All Events</h3>
-        <div class="card" onclick="toggleDetail('event2-detail')">
-            <img src="https://via.placeholder.com/120x80?text=Tech+Talk" class="card-image">
+    
+
+    <?php if (empty($myEvents)): ?>
+        <p>No events found.</p>
+    <?php endif; ?>
+
+    <?php foreach ($myEvents as $index => $event): ?>
+        <div class="card" onclick="toggleDetail('event<?= $index ?>-detail')">
+            <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
             <div>
-                <h4>Tech Talk</h4>
-                <p>RSO – April 25, 2025</p>
+                <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
+                <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
             </div>
         </div>
-        <div id="event2-detail" class="detail">
-            <p><strong>Description:</strong> AI in Industry</p>
-            <textarea placeholder="Write a comment..."></textarea><br>
-            <button>Submit</button> 
-            <button>Edit</button> 
-            <button>Delete</button>
-            
-            <h4>Rate this event</h4>
-            <select>
-                <option value="">Rate from 1 to 5</option>
-                <?php for ($i = 1; $i <= 5; $i++): ?>
-                    <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
-                <?php endfor; ?>
-            </select>
-    </div>
-    </div>
-    </div>
-    </div>
+        <div id="event<?= $index ?>-detail" class="detail">
+            <p><strong>Description:</strong> <?= htmlspecialchars($event['Description']) ?></p>
+            <p><strong>Starts:</strong> <?= date("g:i A", strtotime($event['Start_Time'])) ?></p>
+            <p><strong>Ends:</strong> <?= date("g:i A", strtotime($event['End_Time'])) ?></p>
+            <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
 
-    <script
+        </div>
+    <?php endforeach; ?>
+</div>
+</div>
+</div>
+
+
+   
+<script
     src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
-        async defer></script> 
-
+    async defer>
+</script> 
 <script>
     let map, marker, geocoder, autocomplete;
 
@@ -473,6 +804,28 @@ textarea {
             rsoSelector.style.display = "none";
         }
     }
+
+    function toggleRoomInput() {
+  const checkbox = document.getElementById("roomToggle");
+  const input = document.getElementById("room_number");
+  input.style.display = checkbox.checked ? "block" : "none";
+}
+
 </script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const msg = document.getElementById('event-deleted-msg');
+    if (msg) {
+      setTimeout(() => {
+        msg.style.display = 'none';
+        const url = new URL(window.location);
+        url.searchParams.delete('event_deleted');
+        window.history.replaceState({}, document.title, url.toString());
+      }, 4000);
+    }
+  });
+</script>
+
 </body>
 </html>

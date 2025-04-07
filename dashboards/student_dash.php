@@ -7,6 +7,71 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Student') {
     exit();
 }
 
+$studentID = $_SESSION['UID'];
+$universityID = null;
+
+$univStmt = $conn->prepare("SELECT UniversityID FROM Users WHERE UID = ?");
+$univStmt->bind_param("i", $studentID);
+$univStmt->execute();
+$univStmt->bind_result($universityID);
+$univStmt->fetch();
+$univStmt->close();
+
+// Public events from student's university
+$publicEvents = [];
+$publicStmt = $conn->prepare("
+    SELECT e.*, l.address, 'Public' AS Type
+    FROM Events e
+    JOIN Public_Events p ON e.Event_ID = p.Event_ID
+    JOIN Users u ON p.Admin_ID = u.UID
+    JOIN Location l ON e.Lname = l.lname
+    WHERE u.UniversityID = ? AND e.Event_Date >= CURDATE()
+");
+
+$publicStmt->bind_param("i", $universityID);
+$publicStmt->execute();
+$publicEvents = $publicStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$publicStmt->close();
+
+// Private events for same university
+$privateEvents = [];
+$privateStmt = $conn->prepare("
+    SELECT e.*, l.address, 'Private' AS Type
+    FROM Events e
+    JOIN Private_Events p ON e.Event_ID = p.Event_ID
+    JOIN Location l ON e.Lname = l.lname
+    WHERE p.Admin_ID = ? AND e.Event_Date >= CURDATE()
+");
+
+$privateStmt->bind_param("i", $studentID);
+$privateStmt->execute();
+$privateEvents = $privateStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$privateStmt->close();
+
+// RSO events student is part of
+$rsoEvents = [];
+$rsoStmt = $conn->prepare("
+    SELECT e.*, l.address, 'RSO' AS Type
+    FROM Events e
+    JOIN RSO_Events re ON e.Event_ID = re.Event_ID
+    JOIN RSO_Membership rm ON re.RSO_ID = rm.RSO_ID
+    JOIN Location l ON e.Lname = l.lname
+    WHERE rm.UID = ? AND e.Event_Date >= CURDATE()
+");
+
+$rsoStmt->bind_param("i", $studentID);
+$rsoStmt->execute();
+$rsoEvents = $rsoStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$rsoStmt->close();
+
+$upcomingEvents = array_merge($publicEvents, $privateEvents, $rsoEvents);
+usort($upcomingEvents, function ($a, $b) {
+    return strtotime($a['Event_Date'] . ' ' . $a['Start_Time']) <=> strtotime($b['Event_Date'] . ' ' . $b['Start_Time']);
+});
+
+
+
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_rso'])) {
     $rsoName = trim($_POST['rso_name']);
     $description = trim($_POST['rso_description']);
@@ -52,8 +117,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_rso'])) {
             $adminUID = $_SESSION['UID'];
 
             // Create the RSO
-            $insertRSO = $conn->prepare("INSERT INTO RSOs (RSO_Name, Admin_ID) VALUES (?, ?)");
-            $insertRSO->bind_param("si", $rsoName, $adminUID);
+            $insertRSO = $conn->prepare("INSERT INTO RSOs (RSO_Name, Admin_ID, Description) VALUES (?, ?, ?)");
+            $insertRSO->bind_param("sis", $rsoName, $adminUID, $description);
+            
 
             if ($insertRSO->execute()) {
                 $rsoID = $insertRSO->insert_id;
@@ -162,66 +228,100 @@ $stmt->close();
 
     <!-- Upcoming Events -->
     <div id="upcoming-events" class="section" style="display:none; padding-top:20px;">
-    <div class="event-wrapper">
-    <div class="section-glass">
-      <div style="display: flex; gap: 40px;">
-        <div style="flex: 1;">
-          <h3>Upcoming Event: Innovation Kickoff</h3>
-          <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-            <input type="hidden" name="event_id" value="<?= $eventID ?>">
-            <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
-            <select name="rating" required>
-              <option value="">Rate</option>
-              <?php for ($i = 1; $i <= 5; $i++): ?>
-                <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
-              <?php endfor; ?>
-            </select><br>
-            <button name="submit_comment">Submit</button>
-          </form>
-        </div>
+<div class="event-wrapper">
+<div class="section-glass">
 
-        <div style="flex: 1;">
-          <h4>Comments</h4>
-          <?php foreach ($comments as $c): ?>
-            <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
+  <?php if (empty($upcomingEvents)): ?>
+    <p>No upcoming events found.</p>
+  <?php endif; ?>
+
+  <?php foreach ($upcomingEvents as $index => $event): ?>
+  <?php
+    $eventID = $event['Event_ID'];
+    $stmt = $conn->prepare("
+        SELECT c.Comment_ID, c.Text, c.Rating, c.UID, u.Name
+        FROM Comments c
+        JOIN Users u ON c.UID = u.UID
+        WHERE c.Event_ID = ?
+        ORDER BY c.Timestamp DESC
+    ");
+    $stmt->bind_param("i", $eventID);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $comments = [];
+    while ($row = $res->fetch_assoc()) $comments[] = $row;
+    $stmt->close();
+  ?>
+
+  <div class="event-card">
+    <div style="display: flex; gap: 40px;">
+      <!-- Left: Event Info and Comment Form -->
+      <div style="flex: 1;">
+        <h3><?= htmlspecialchars($event['Event_Name']) ?> (<?= $event['Type'] ?>)</h3>
+        <p><?= htmlspecialchars($event['Description']) ?></p>
+        <p><strong>Date:</strong> <?= htmlspecialchars($event['Event_Date']) ?> | 
+           <strong>Time:</strong> <?= htmlspecialchars($event['Start_Time']) ?> - <?= htmlspecialchars($event['End_Time']) ?></p>
+           <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
+
+
+        <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+          <input type="hidden" name="event_id" value="<?= $eventID ?>">
+          <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
+          <select name="rating" required>
+            <option value="">Rate</option>
+            <?php for ($i = 1; $i <= 5; $i++): ?>
+              <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+            <?php endfor; ?>
+          </select><br>
+          <button name="submit_comment">Submit</button>
+        </form>
+      </div>
+
+      <!-- Right: Comments -->
+      <div style="flex: 1;">
+        <h4>Comments</h4>
+        <?php foreach ($comments as $c): ?>
+          <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
             <strong><?= htmlspecialchars($c['Name']) ?></strong><br>
-            <?php
-            $filled = str_repeat('⭐', $c['Rating']);
-            $empty = str_repeat('☆', 5 - $c['Rating']);
-            echo "Stars: $filled$empty";
-            ?>
+            <?= str_repeat('⭐', $c['Rating']) . str_repeat('☆', 5 - $c['Rating']) ?><br>
 
-              <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
-                <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen', 'true')">
+            <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
+              <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen', 'true')">
+                <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
+                <select name="rating">
+                  <?php for ($i = 1; $i <= 5; $i++): ?>
+                    <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+                  <?php endfor; ?>
+                </select><br>
+                <button name="edit_comment">Save</button>
+              </form>
+            <?php else: ?>
+              <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
+              <?php if ($c['UID'] == $_SESSION['UID']): ?>
+                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
                   <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                  <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
-                  <select name="rating">
-                    <?php for ($i = 1; $i <= 5; $i++): ?>
-                      <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
-                    <?php endfor; ?>
-                  </select><br>
-                  <button name="edit_comment">Save</button>
+                  <button name="edit_comment">Edit</button>
                 </form>
-              <?php else: ?>
-                <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
-                <?php if ($c['UID'] == $_SESSION['UID']): ?>
-                  <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-                    <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                    <button name="edit_comment">Edit</button>
-                  </form>
-                  <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-                    <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                    <button name="delete_comment">Delete</button>
-                  </form>
-                <?php endif; ?>
+                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                  <button name="delete_comment">Delete</button>
+                </form>
               <?php endif; ?>
-            </div>
-          <?php endforeach; ?>
-        </div>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
       </div>
     </div>
   </div>
+<?php endforeach; ?>
+
+
+
 </div>
+</div>
+</div>
+
 
 
 <style>
@@ -375,6 +475,16 @@ button:hover {
   padding-top: 40px;
   padding-bottom: 40px;
 }
+
+.event-card {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(6px);
+  padding: 25px;
+  margin-bottom: 40px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
 
 </style>
 

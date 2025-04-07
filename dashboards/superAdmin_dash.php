@@ -146,6 +146,40 @@ if ($result && $result->num_rows > 0) {
         .actions { margin-top: 10px; }
         input, select, textarea { width: 100%; padding: 5px; margin: 5px 0; }
         button.toggle { margin: 5px 10px 0 0; }
+
+        .logout-button {
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  background-color:rgb(195, 205, 233);
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  color: black;
+  font-weight: bold;
+  cursor: pointer;
+}
+.logout-button:hover {
+    background-color:rgb(160, 91, 86);
+}
+
+.button-group {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 20px auto 30px;
+}
+button {
+    background-color:rgb(195, 205, 233);
+    color: black;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color:rgb(225, 226, 230);
+}
+
     </style>
     <script>
         function toggleSection(id) {
@@ -164,15 +198,19 @@ if ($result && $result->num_rows > 0) {
     </script>
 </head>
 <body>
-    <h1>Welcome to the Super Admin Dashboard</h1>
-    <a href="../auth/logout.php"><button>Logout</button></a>
+<div class="dashboard-header">
+<h1 style="text-align: center;">Welcome to the Super Admin Dashboard</h1>
+    <a href="../auth/logout.php"><button class="logout-button">Logout</button></a>
+    </div>
 
     <hr>
 
-    <h2>Super Admin Actions</h2>
+    <div class="button-group">
     <button class="toggle" onclick="toggleSection('createUniversity')">Create University</button>
     <button class="toggle" onclick="toggleSection('universityDirectory')">University Directory</button>
     <button class="toggle" onclick="toggleSection('approveEvents')">Approve Events</button>
+</div>
+
 
     <!-- Create University Section -->
     <div id="createUniversity" class="section">
@@ -260,8 +298,8 @@ if ($result && $result->num_rows > 0) {
         <?php endforeach; ?>
     </div>
     <script
-        src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
-        async defer></script>
+    src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
+    async defer></script>
 <script>
     let map, marker, geocoder, autocomplete;
 
