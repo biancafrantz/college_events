@@ -715,13 +715,12 @@ textarea {
 </div>
 </div>
 </div>
-
-
    
 <script
     src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
     async defer>
 </script> 
+
 <script>
     let map, marker, geocoder, autocomplete;
 

@@ -15,8 +15,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $eventId = intval($_POST['eventId']);
         $newStatus = isset($_POST['approveEvent']) ? 'Approved' : 'Rejected';
 
-        $stmt = $conn->prepare("UPDATE Events SET Status = ? WHERE Event_ID = ?");
-        $stmt->bind_param("si", $newStatus, $eventId);
+        $stmt = $conn->prepare("UPDATE Public_Events SET Status = ?, SuperAdmin_ID = ? WHERE Event_ID = ?");
+        $stmt->bind_param("sii", $newStatus, $_SESSION['UID'], $eventId);
 
         if ($stmt->execute()) {
             $successMessage = "Event has been " . strtolower($newStatus) . ".";
@@ -260,16 +260,19 @@ button:hover {
         <?php
         $pendingEvents = [];
 
-        $eventQuery = $conn->query("
-            SELECT e.Event_ID, e.Event_Name, e.Description, e.Time, l.address, l.lname
+        $sql = "
+            SELECT e.Event_ID, e.Event_Name, e.Description, e.Event_Date, e.Start_Time, e.End_Time, l.address, l.lname, p.Status
             FROM Events e
+            JOIN Public_Events p ON e.Event_ID = p.Event_ID
             JOIN Location l ON e.lname = l.lname
-            WHERE e.Status = 'Pending'
-            ORDER BY e.Time ASC
-        ");
+            WHERE p.Status = 'Pending'
+            ORDER BY e.Event_Date ASC, e.Start_Time ASC
+        ";
 
-        if ($eventQuery && $eventQuery->num_rows > 0) {
-            while ($row = $eventQuery->fetch_assoc()) {
+        $result = $conn->query($sql);
+
+        if ($result && $result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
                 $pendingEvents[] = $row;
             }
         }
@@ -283,7 +286,11 @@ button:hover {
             <div class="card" onclick="toggleDetail('event<?= $index ?>-detail')">
                 <div>
                     <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
-                    <p><?= date("F j, Y @ g:i A", strtotime($event['Time'])) ?> – <?= htmlspecialchars($event['lname']) ?></p>
+                    <p>
+                        <?= date("F j, Y", strtotime($event['Event_Date'])) ?>
+                        @ <?= date("g:i A", strtotime($event['Start_Time'])) ?>
+                        – <?= htmlspecialchars($event['lname']) ?>
+                    </p>
                 </div>
             </div>
             <div id="event<?= $index ?>-detail" class="detail">
@@ -297,9 +304,11 @@ button:hover {
             </div>
         <?php endforeach; ?>
     </div>
+    
     <script
-    src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
-    async defer></script>
+        src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
+        async defer></script>
+
 <script>
     let map, marker, geocoder, autocomplete;
 
