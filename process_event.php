@@ -3,8 +3,6 @@ require 'db_connect.php'; // DB connection
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
     try {
         // Grab form inputs
         $ename = $_POST["ename"];
@@ -25,18 +23,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $longitude = $_POST["longitude"];
         $rsoID = $_POST['rso'] ?? null;
 
-        // Get Admin ID
-        $adminQuery = $conn->prepare("SELECT UID FROM Users WHERE Email = ? AND UserType = 'Admin'");
-        $adminQuery->bind_param("s", $contactEmail);
-        $adminQuery->execute();
-        $adminResult = $adminQuery->get_result();
+        // Get current user's UID from session (assuming it's stored there)
+        session_start();
+        $adminID = $_SESSION['UID'] ?? null;
 
-        if ($adminRow = $adminResult->fetch_assoc()) {
-            $adminID = $adminRow['UID'];
-        } else {
+        if (!$adminID) {
             echo "<script>
-                alert('Error: Admin not found or not authorized.');
-                window.history.back();
+                alert('Error: Unauthorized. Please log in again.');
+                window.location.href = 'login.php';
             </script>";
             exit;
         }
@@ -53,13 +47,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insertLoc->execute();
         }
 
-        // Insert into Events table
-        $eventStmt = $conn->prepare("INSERT INTO Events (Event_Name, Description, Event_Date, Start_Time, End_Time, lname) VALUES (?, ?, ?, ?, ?, ?)");
-        $eventStmt->bind_param("ssssss", $ename, $edesc, $eventDate, $startTime, $endTime, $lname);
+        // Insert into Events table (now includes Contact_Email and Contact_Phone)
+        $eventStmt = $conn->prepare("
+            INSERT INTO Events (Event_Name, Description, Event_Date, Start_Time, End_Time, lname, Contact_Email, Contact_Phone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $eventStmt->bind_param("ssssssss", $ename, $edesc, $eventDate, $startTime, $endTime, $lname, $contactEmail, $phone);
         $eventStmt->execute();
 
         $eventID = $conn->insert_id;
 
+        // Insert into correct event type table
         if ($eventType === "public") {
             $status = 'Pending';
             $superAdminID = null;
