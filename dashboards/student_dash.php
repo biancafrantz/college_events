@@ -7,6 +7,23 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Student') {
     exit();
 }
 
+function updateRSOStatus($conn, $rsoID) {
+    $stmt = $conn->prepare("SELECT COUNT(*) FROM RSO_Membership WHERE RSO_ID = ?");
+    $stmt->bind_param("i", $rsoID);
+    $stmt->execute();
+    $stmt->bind_result($count);
+    $stmt->fetch();
+    $stmt->close();
+
+    $status = $count >= 5 ? 'Active' : 'Inactive';
+
+    $update = $conn->prepare("UPDATE RSOs SET Status = ? WHERE RSO_ID = ?");
+    $update->bind_param("si", $status, $rsoID);
+    $update->execute();
+    $update->close();
+}
+
+
 $studentID = $_SESSION['UID'];
 $universityID = null;
 
@@ -75,78 +92,93 @@ usort($upcomingEvents, function ($a, $b) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_rso'])) {
     $rsoName = trim($_POST['rso_name']);
     $description = trim($_POST['rso_description']);
-    $memberEmails = array_unique(array_filter([
-        $_POST['email1'], $_POST['email2'], $_POST['email3'], $_POST['email4']
-    ]));
 
-    if (count($memberEmails) !== 4) {
-        $error = "You must provide 4 unique additional member emails.";
-    } else {
-        $uids = [];
-        $universityID = null;
+    // Collect all email inputs (email1, email2, email3, etc.)
+    $memberEmails = [];
+    foreach ($_POST as $key => $value) {
+        if (preg_match('/^email\d+$/', $key) && filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            $memberEmails[] = trim($value);
+        }
+    }
 
-        foreach ($memberEmails as $email) {
-            $stmt = $conn->prepare("SELECT UID, UserType, UniversityID FROM Users WHERE Email = ?");
-            $stmt->bind_param("s", $email);
-            $stmt->execute();
-            $stmt->bind_result($uid, $userType, $userUnivID);
+    $memberEmails = array_unique($memberEmails);
+    $uids = [];
+    $universityID = null;
 
-            if ($stmt->fetch()) {
-                if ($userType !== 'Student') {
-                    $error = "User with email $email is not a Student.";
-                    break;
-                }
+    foreach ($memberEmails as $email) {
+        $stmt = $conn->prepare("SELECT UID, UserType, UniversityID FROM Users WHERE Email = ?");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $stmt->bind_result($uid, $userType, $userUnivID);
 
-                if ($universityID === null) {
-                    $universityID = $userUnivID;
-                } elseif ($universityID !== $userUnivID) {
-                    $error = "All users must belong to the same university.";
-                    break;
-                }
-
-                $uids[] = $uid;
-            } else {
-                $error = "User with email $email does not exist.";
+        if ($stmt->fetch()) {
+            if ($userType !== 'Student') {
+                $error = "User with email $email is not a Student.";
+                $stmt->close();
                 break;
             }
 
-            $stmt->close();
-        }
-
-        if (!isset($error)) {
-            $adminUID = $_SESSION['UID'];
-
-            // Create the RSO
-            $insertRSO = $conn->prepare("INSERT INTO RSOs (RSO_Name, Admin_ID, Description) VALUES (?, ?, ?)");
-            $insertRSO->bind_param("sis", $rsoName, $adminUID, $description);
-            
-
-            if ($insertRSO->execute()) {
-                $rsoID = $insertRSO->insert_id;
-
-                // Add members to RSO_Membership
-                foreach ($uids as $uid) {
-                    $memInsert = $conn->prepare("INSERT INTO RSO_Membership (UID, RSO_ID) VALUES (?, ?)");
-                    $memInsert->bind_param("ii", $uid, $rsoID);
-                    $memInsert->execute();
-                    $memInsert->close();
-                }
-
-                // Promote creator to Admin if not already
-                $promoteStmt = $conn->prepare("UPDATE Users SET UserType = 'Admin' WHERE UID = ? AND UserType = 'Student'");
-                $promoteStmt->bind_param("i", $adminUID);
-                $promoteStmt->execute();
-                $promoteStmt->close();
-
-                $success = "RSO '$rsoName' created successfully!";
-            } else {
-                $error = "RSO creation failed: possibly a duplicate name.";
+            if ($universityID === null) {
+                $universityID = $userUnivID;
+            } elseif ($universityID !== $userUnivID) {
+                $error = "All users must belong to the same university.";
+                $stmt->close();
+                break;
             }
 
-            $insertRSO->close();
+            $uids[] = $uid;
+        } else {
+            $error = "User with email $email does not exist.";
+            $stmt->close();
+            break;
         }
+
+        $stmt->close();
+    }
+
+    if (!isset($error)) {
+        $adminUID = $_SESSION['UID'];
+
+        // Create the RSO with appropriate status
+        $status = (count($uids) + 1) >= 5 ? 'Active' : 'Inactive';
+        $insertRSO = $conn->prepare("INSERT INTO RSOs (RSO_Name, Admin_ID, Description, Status) VALUES (?, ?, ?, ?)");
+        $insertRSO->bind_param("siss", $rsoName, $adminUID, $description, $status);
+
+        if ($insertRSO->execute()) {
+            $rsoID = $insertRSO->insert_id;
+
+            // Add all validated members
+            foreach ($uids as $uid) {
+                $memInsert = $conn->prepare("INSERT INTO RSO_Membership (UID, RSO_ID) VALUES (?, ?)");
+                $memInsert->bind_param("ii", $uid, $rsoID);
+                $memInsert->execute();
+                $memInsert->close();
+            }
+
+            // Add the creator as a member
+            $creatorInsert = $conn->prepare("INSERT INTO RSO_Membership (UID, RSO_ID) VALUES (?, ?)");
+            $creatorInsert->bind_param("ii", $adminUID, $rsoID);
+            $creatorInsert->execute();
+            $creatorInsert->close();
+
+            // Final check and update status
+            updateRSOStatus($conn, $rsoID);
+
+            // Promote student to Admin if not already
+            $promoteStmt = $conn->prepare("UPDATE Users SET UserType = 'Admin' WHERE UID = ? AND UserType = 'Student'");
+            $promoteStmt->bind_param("i", $adminUID);
+            $promoteStmt->execute();
+            $promoteStmt->close();
+
+            $success = "RSO '$rsoName' created successfully!";
+        } else {
+            $error = "RSO creation failed: possibly a duplicate name.";
+        }
+
+        $insertRSO->close();
     }
 }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['submit_comment'])) {
         $eventID = $_POST['event_id'];
@@ -510,10 +542,10 @@ button:hover {
 
             <div id="email-container">
                 <h4>Additional Member Emails (4 required)</h4>
-                <input type="email" name="email1" placeholder="Member Email 1" required>
-                <input type="email" name="email2" placeholder="Member Email 2" required>
-                <input type="email" name="email3" placeholder="Member Email 3" required>
-                <input type="email" name="email4" placeholder="Member Email 4" required>
+                <input type="email" name="email1" placeholder="Member Email 1">
+                <input type="email" name="email2" placeholder="Member Email 2">
+                <input type="email" name="email3" placeholder="Member Email 3">
+                <input type="email" name="email4" placeholder="Member Email 4">
             </div>
 
             <button type="submit" name="create_rso">Create RSO</button>

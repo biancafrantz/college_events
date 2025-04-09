@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (!empty($roomNumber)) {
     $address .= " Room $roomNumber";
 }
+
     $latitude = $_POST["latitude"];
     $longitude = $_POST["longitude"];
     $rsoID = $_POST['rso'] ?? null;
