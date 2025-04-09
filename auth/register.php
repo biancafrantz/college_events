@@ -9,9 +9,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $Email = trim($_POST['Email']);
         $UserType = $_POST['UserType'];
         $Password = password_hash($_POST['Password'], PASSWORD_DEFAULT);
-        $Domain = substr(strrchr($Email, "@"), 1); // Extract domain after '@'
 
-        // Check if email is already in use
+        // Extract email domain
+        $emailParts = explode('@', $Email);
+        $emailDomain = isset($emailParts[1]) ? strtolower($emailParts[1]) : null;
+
+        // Default to NULL university
+        $universityID = null;
+
+        if ($emailDomain) {
+            // Try to find matching university
+            $uni_stmt = $conn->prepare("SELECT UniversityID FROM Universities WHERE LOWER(EmailDomain) = ?");
+            $uni_stmt->bind_param("s", $emailDomain);
+            $uni_stmt->execute();
+            $uni_result = $uni_stmt->get_result();
+
+            if ($uni_result->num_rows > 0) {
+                $uni_row = $uni_result->fetch_assoc();
+                $universityID = $uni_row['UniversityID'];
+            }
+        }
+
+        // Check if email already exists
         $check_stmt = $conn->prepare("SELECT Email FROM Users WHERE Email = ?");
         $check_stmt->bind_param("s", $Email);
         $check_stmt->execute();
@@ -20,21 +39,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($check_stmt->num_rows > 0) {
             $message = "Error: This email is already registered!";
         } else {
-            // Fetch university name based on domain
-            $stmt = $conn->prepare("SELECT University FROM UniversityDomains WHERE Domain = ?");
-            $stmt->bind_param("s", $Domain);
-            $stmt->execute();
-            $result = $stmt->get_result();
-
-            if ($row = $result->fetch_assoc()) {
-                $University = $row['University'];
-            } else {
-                $University = 'Unknown University'; // Default value if domain not found
-            }
-
-            // Insert new user
-            $stmt = $conn->prepare("INSERT INTO Users (Name, Email, UserType, Password, University) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssss", $Name, $Email, $UserType, $Password, $University);
+            // Insert user with UniversityID (can be NULL)
+            $stmt = $conn->prepare("INSERT INTO Users (Name, Email, UserType, Password, UniversityID) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssi", $Name, $Email, $UserType, $Password, $universityID);
 
             if ($stmt->execute()) {
                 $message = "Registration successful! You can now <a href='login.php'>login</a>.";
@@ -54,6 +61,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register</title>
+    <link rel="stylesheet" href="../assets/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         .message {
             padding: 10px;
@@ -66,31 +75,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </style>
 </head>
 <body>
-    <h2>Register</h2>
+    <div class="centered-form">
+        <h2>Register</h2>
 
-    <!-- Display Messages -->
-    <?php if (!empty($message)): ?>
-        <div class="message <?= strpos($message, 'Error') !== false ? 'error' : 'success' ?>">
-            <?= $message ?>
-        </div>
-    <?php endif; ?>
+        <!-- Display Messages -->
+        <?php if (!empty($message)): ?>
+            <div class="message <?= strpos($message, 'Error') !== false ? 'error' : 'success' ?>">
+                <?= $message ?>
+            </div>
+        <?php endif; ?>
 
-    <form action="register.php" method="POST">
-        Name: <input type="text" name="Name" required><br>
-        Email: <input type="email" name="Email" required><br>
-        UserType:
-        <select name="UserType">
-            <option value="Student">Student</option>
-            <option value="Admin">Admin</option>
-            <option value="SuperAdmin">Super Admin</option>
-        </select>
-        <br>
-        Password: <input type="password" name="Password" required><br>
-        <input type="submit" value="Register">
-    </form>
+        <form action="register.php" method="POST">
+            <input type="text" name="Name" placeholder="Name" required>
+            <input type="email" name="Email" placeholder="Email" required>
+            <input type="password" name="Password" placeholder="Password" required>
+            <select name="UserType" required>
+                <option value="" disabled selected>Select User Type</option>
+                <option value="Student">Student</option>
+                <option value="Admin">Admin</option>
+                <option value="SuperAdmin">Super Admin</option>
+            </select>
+            <input type="submit" value="Register">
+        </form>
 
-    <p>Already have an account? 
-        <a href="login.php"><button type="button">Login</button></a>
-    </p>
+        <p>Already have an account?</p>
+        <a href="login.php">
+            <button type="button">Login</button>
+        </a>
+    </div>
 </body>
+
 </html>
