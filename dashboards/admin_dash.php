@@ -226,7 +226,7 @@ $publicEventsStmt->close();
 
 // Get Private Events created by this admin
 $privateEventsStmt = $conn->prepare("
-    SELECT e.*, l.address, 'Public' AS Type
+    SELECT e.*, l.address, 'Private' AS Type
 FROM Events e
 JOIN Location l ON e.lname = l.lname
     JOIN Private_Events pr ON e.Event_ID = pr.Event_ID
@@ -240,7 +240,7 @@ $privateEventsStmt->close();
 
 // Get RSO Events managed by this admin
 $rsoEventsStmt = $conn->prepare("
-    SELECT e.*, l.address, 'Public' AS Type
+    SELECT e.*, l.address, 'RSO' AS Type
 FROM Events e
 JOIN Location l ON e.lname = l.lname
     JOIN RSO_Events re ON e.Event_ID = re.Event_ID
