@@ -579,7 +579,7 @@ textarea {
           </label>
         </div>
 
-        <input type="email" name="contact_email" value="<?= htmlspecialchars($adminEmail, ENT_QUOTES, 'UTF-8'); ?>" readonly>
+        <input type="email" name="contact_email" value="<?= htmlspecialchars($adminEmail, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Contact Email" required>
         <input type="text" placeholder="Contact Phone" name="phone">
 
         <h4>Select Location</h4>
@@ -677,93 +677,93 @@ textarea {
 
 
 <div id="upcoming-events" class="section" style="display:none; padding-top:20px;">
-<div class="event-wrapper">
-<div class="section-glass">
+  <div class="event-wrapper">
+    <div class="section-glass">
+      <h3>Upcoming Events</h3>
+      <?php if (empty($upcomingEvents)): ?>
+        <p>No upcoming events found.</p>
+      <?php endif; ?>
 
-  <?php if (empty($upcomingEvents)): ?>
-    <p>No upcoming events found.</p>
-  <?php endif; ?>
+      <?php foreach ($upcomingEvents as $index => $event): ?>
+        <?php
+          $eventID = $event['Event_ID'];
+          $stmt = $conn->prepare("
+              SELECT c.Comment_ID, c.Text, c.Rating, c.UID, u.Name
+              FROM Comments c
+              JOIN Users u ON c.UID = u.UID
+              WHERE c.Event_ID = ?
+              ORDER BY c.Timestamp DESC
+          ");
+          $stmt->bind_param("i", $eventID);
+          $stmt->execute();
+          $res = $stmt->get_result();
+          $comments = [];
+          while ($row = $res->fetch_assoc()) $comments[] = $row;
+          $stmt->close();
+        ?>
 
-  <?php foreach ($upcomingEvents as $index => $event): ?>
-  <?php
-    $eventID = $event['Event_ID'];
-    $stmt = $conn->prepare("
-        SELECT c.Comment_ID, c.Text, c.Rating, c.UID, u.Name
-        FROM Comments c
-        JOIN Users u ON c.UID = u.UID
-        WHERE c.Event_ID = ?
-        ORDER BY c.Timestamp DESC
-    ");
-    $stmt->bind_param("i", $eventID);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $comments = [];
-    while ($row = $res->fetch_assoc()) $comments[] = $row;
-    $stmt->close();
-  ?>
+        <div class="event-card">
+          <div style="display: flex; gap: 40px;">
+            <div style="flex: 1;">
+              <h3><?= htmlspecialchars($event['Event_Name']) ?> (<?= $event['Type'] ?>)</h3>
+              <p><?= htmlspecialchars($event['Description']) ?></p>
+              <p><strong>Date:</strong> <?= htmlspecialchars($event['Event_Date']) ?> | 
+                 <strong>Time:</strong> <?= htmlspecialchars($event['Start_Time']) ?> - <?= htmlspecialchars($event['End_Time']) ?></p>
+              <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
 
-  <div class="event-card">
-    <div style="display: flex; gap: 40px;">
-      <!-- Left: Event Info and Comment Form -->
-      <div style="flex: 1;">
-        <h3><?= htmlspecialchars($event['Event_Name']) ?> (<?= $event['Type'] ?>)</h3>
-        <p><?= htmlspecialchars($event['Description']) ?></p>
-        <p><strong>Date:</strong> <?= htmlspecialchars($event['Event_Date']) ?> | 
-           <strong>Time:</strong> <?= htmlspecialchars($event['Start_Time']) ?> - <?= htmlspecialchars($event['End_Time']) ?></p>
-           <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
-
-
-        <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-          <input type="hidden" name="event_id" value="<?= $eventID ?>">
-          <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
-          <select name="rating" required>
-            <option value="">Rate</option>
-            <?php for ($i = 1; $i <= 5; $i++): ?>
-              <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
-            <?php endfor; ?>
-          </select><br>
-          <button name="submit_comment">Submit</button>
-        </form>
-      </div>
-
-      <!-- Right: Comments -->
-      <div style="flex: 1;">
-        <h4>Comments</h4>
-        <?php foreach ($comments as $c): ?>
-          <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
-            <strong><?= htmlspecialchars($c['Name']) ?></strong><br>
-            <?= str_repeat('⭐', $c['Rating']) . str_repeat('☆', 5 - $c['Rating']) ?><br>
-
-            <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
-              <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen', 'true')">
-                <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
-                <select name="rating">
+              <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                <input type="hidden" name="event_id" value="<?= $eventID ?>">
+                <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
+                <select name="rating" required>
+                  <option value="">Rate</option>
                   <?php for ($i = 1; $i <= 5; $i++): ?>
-                    <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+                    <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
                   <?php endfor; ?>
                 </select><br>
-                <button name="edit_comment">Save</button>
+                <button name="submit_comment">Submit</button>
               </form>
-            <?php else: ?>
-              <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
-              <?php if ($c['UID'] == $_SESSION['UID']): ?>
-                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                  <button name="edit_comment">Edit</button>
-                </form>
-                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                  <button name="delete_comment">Delete</button>
-                </form>
-              <?php endif; ?>
-            <?php endif; ?>
+            </div>
+
+            <div style="flex: 1;">
+              <h4>Comments</h4>
+              <?php foreach ($comments as $c): ?>
+                <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
+                  <strong><?= htmlspecialchars($c['Name']) ?></strong><br>
+                  <?= str_repeat('⭐', $c['Rating']) . str_repeat('☆', 5 - $c['Rating']) ?><br>
+
+                  <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
+                    <form method="POST">
+                      <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                      <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
+                      <select name="rating">
+                        <?php for ($i = 1; $i <= 5; $i++): ?>
+                          <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+                        <?php endfor; ?>
+                      </select><br>
+                      <button name="edit_comment">Save</button>
+                    </form>
+                  <?php else: ?>
+                    <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
+                    <?php if ($c['UID'] == $_SESSION['UID']): ?>
+                      <form method="POST" style="display:inline;">
+                        <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                        <button name="edit_comment">Edit</button>
+                      </form>
+                      <form method="POST" style="display:inline;">
+                        <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                        <button name="delete_comment">Delete</button>
+                      </form>
+                    <?php endif; ?>
+                  <?php endif; ?>
+                </div>
+              <?php endforeach; ?>
+            </div>
           </div>
-        <?php endforeach; ?>
-      </div>
+        </div>
+      <?php endforeach; ?>
     </div>
   </div>
-<?php endforeach; ?>
+</div>
 
 <!-- View All Events -->
 <div id="view-all-events" class="section" style="display:none; padding-top:20px;">
@@ -787,6 +787,8 @@ textarea {
           <p><strong>Starts:</strong> <?= date("g:i A", strtotime($event['Start_Time'])) ?></p>
           <p><strong>Ends:</strong> <?= date("g:i A", strtotime($event['End_Time'])) ?></p>
           <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
+          <p><strong>Contact Email:</strong> <?= htmlspecialchars($event['Contact_Email']) ?></p>
+          <p><strong>Contact Phone:</strong> <?= htmlspecialchars($event['Contact_Phone']) ?></p>
         </div>
       <?php endforeach; ?>
     </div>
