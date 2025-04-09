@@ -34,6 +34,18 @@ $univStmt->bind_result($universityID);
 $univStmt->fetch();
 $univStmt->close();
 
+$universityName = '';
+
+if ($universityID) {
+    $stmt = $conn->prepare("SELECT Name FROM Universities WHERE UniversityID = ?");
+    $stmt->bind_param("i", $universityID);
+    $stmt->execute();
+    $stmt->bind_result($universityName);
+    $stmt->fetch();
+    $stmt->close();
+}
+
+
 // Public events from student's university
 $publicEvents = [];
 $publicStmt = $conn->prepare("
@@ -247,10 +259,17 @@ $stmt->close();
     </script>
 </head>
 <body>
-    <div class="dashboard-header">
+<div class="dashboard-header">
     <h1>Welcome to the Student Dashboard</h1>
     <a href="../auth/logout.php"><button class="logout-button">Logout</button></a>
+</div>
+
+<?php if (!empty($universityName)): ?>
+    <div style="text-align: center; margin-top: 0px;">
+        <p style="font-size: 32px; font-weight: 900;"><?= htmlspecialchars($universityName) ?></p>
     </div>
+<?php endif; ?>
+
     <hr>
 
     <div class="student-button-group">
