@@ -11,12 +11,45 @@ $successMessage = "";
 $errorMessage = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['submit_comment'])) {
+        $eventID = $_POST['event_id'];
+        $text = trim($_POST['comment_text']);
+        $rating = intval($_POST['rating']);
+        if ($text !== '' && $rating >= 1 && $rating <= 5) {
+            $stmt = $conn->prepare("INSERT INTO Comments (Event_ID, UID, Text, Rating) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("iisi", $eventID, $_SESSION['UID'], $text, $rating);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+
+    if (isset($_POST['edit_comment']) && isset($_POST['comment_text'])) {
+        $commentID = $_POST['comment_id'];
+        $text = trim($_POST['comment_text']);
+        $rating = intval($_POST['rating']);
+        $stmt = $conn->prepare("UPDATE Comments SET Text = ?, Rating = ? WHERE Comment_ID = ? AND UID = ?");
+        $stmt->bind_param("siii", $text, $rating, $commentID, $_SESSION['UID']);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    if (isset($_POST['delete_comment'])) {
+        $commentID = $_POST['comment_id'];
+        $stmt = $conn->prepare("DELETE FROM Comments WHERE Comment_ID = ? AND UID = ?");
+        $stmt->bind_param("ii", $commentID, $_SESSION['UID']);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['approveEvent']) || isset($_POST['rejectEvent'])) {
         $eventId = intval($_POST['eventId']);
         $newStatus = isset($_POST['approveEvent']) ? 'Approved' : 'Rejected';
 
-        $stmt = $conn->prepare("UPDATE Events SET Status = ? WHERE Event_ID = ?");
-        $stmt->bind_param("si", $newStatus, $eventId);
+        $stmt = $conn->prepare("UPDATE Public_Events SET Status = ?, SuperAdmin_ID = ? WHERE Event_ID = ?");
+        $stmt->bind_param("sii", $newStatus, $_SESSION['UID'], $eventId);
 
         if ($stmt->execute()) {
             $successMessage = "Event has been " . strtolower($newStatus) . ".";
@@ -114,9 +147,10 @@ if ($result && $result->num_rows > 0) {
     <meta charset="UTF-8">
     <title>Super Admin Dashboard</title>
     <link rel="stylesheet" href="../assets/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        .section { display: none; margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; background: #fefefe; }
+    <script
+    src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
+    async defer></script>    <style>
+        .section { display: none; margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; background:rgba(254, 254, 254, 0.42); }
         .card {
             display: flex;
             align-items: center;
@@ -180,6 +214,34 @@ button:hover {
     background-color:rgb(225, 226, 230);
 }
 
+.event-wrapper {
+  display: flex;
+  justify-content: center;
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
+.section-glass {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px);
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  max-width: 1000px;
+}
+
+.event-card {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(6px);
+  padding: 25px;
+  margin-bottom: 40px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+
+
     </style>
     <script>
         function toggleSection(id) {
@@ -209,6 +271,7 @@ button:hover {
     <button class="toggle" onclick="toggleSection('createUniversity')">Create University</button>
     <button class="toggle" onclick="toggleSection('universityDirectory')">University Directory</button>
     <button class="toggle" onclick="toggleSection('approveEvents')">Approve Events</button>
+    <button class="toggle" onclick="toggleSection('upcoming-events')">Upcoming Events</button>
 </div>
 
 
@@ -260,16 +323,19 @@ button:hover {
         <?php
         $pendingEvents = [];
 
-        $eventQuery = $conn->query("
-            SELECT e.Event_ID, e.Event_Name, e.Description, e.Time, l.address, l.lname
+        $sql = "
+            SELECT e.Event_ID, e.Event_Name, e.Description, e.Event_Date, e.Start_Time, e.End_Time, l.address, l.lname, p.Status
             FROM Events e
+            JOIN Public_Events p ON e.Event_ID = p.Event_ID
             JOIN Location l ON e.lname = l.lname
-            WHERE e.Status = 'Pending'
-            ORDER BY e.Time ASC
-        ");
+            WHERE p.Status = 'Pending'
+            ORDER BY e.Event_Date ASC, e.Start_Time ASC
+        ";
 
-        if ($eventQuery && $eventQuery->num_rows > 0) {
-            while ($row = $eventQuery->fetch_assoc()) {
+        $result = $conn->query($sql);
+
+        if ($result && $result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
                 $pendingEvents[] = $row;
             }
         }
@@ -283,7 +349,11 @@ button:hover {
             <div class="card" onclick="toggleDetail('event<?= $index ?>-detail')">
                 <div>
                     <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
-                    <p><?= date("F j, Y @ g:i A", strtotime($event['Time'])) ?> – <?= htmlspecialchars($event['lname']) ?></p>
+                    <p>
+                        <?= date("F j, Y", strtotime($event['Event_Date'])) ?>
+                        @ <?= date("g:i A", strtotime($event['Start_Time'])) ?>
+                        – <?= htmlspecialchars($event['lname']) ?>
+                    </p>
                 </div>
             </div>
             <div id="event<?= $index ?>-detail" class="detail">
@@ -297,9 +367,131 @@ button:hover {
             </div>
         <?php endforeach; ?>
     </div>
-    <script
-    src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
-    async defer></script>
+
+ <!-- Upcoming Events -->
+ <?php
+$upcomingEvents = [];
+
+$stmt = $conn->prepare("
+    SELECT e.*, l.address, 
+           CASE 
+             WHEN EXISTS (SELECT 1 FROM Public_Events p WHERE p.Event_ID = e.Event_ID) THEN 'Public'
+             WHEN EXISTS (SELECT 1 FROM Private_Events p WHERE p.Event_ID = e.Event_ID) THEN 'Private'
+             WHEN EXISTS (SELECT 1 FROM RSO_Events r WHERE r.Event_ID = e.Event_ID) THEN 'RSO'
+             ELSE 'Unknown'
+           END AS Type
+    FROM Events e
+    JOIN Location l ON e.Lname = l.lname
+    WHERE e.Event_Date >= CURDATE()
+    ORDER BY e.Event_Date ASC, e.Start_Time ASC
+");
+
+$stmt->execute();
+$result = $stmt->get_result();
+$upcomingEvents = $result->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+?>
+
+ 
+ <div id="upcoming-events" class="section" style="display:none; padding-top:20px;">
+<div class="event-wrapper">
+<div class="section-glass">
+
+  <?php if (empty($upcomingEvents)): ?>
+    <p>No upcoming events found.</p>
+  <?php endif; ?>
+
+  <?php foreach ($upcomingEvents as $index => $event): ?>
+  <?php
+    $eventID = $event['Event_ID'];
+    $stmt = $conn->prepare("
+        SELECT c.Comment_ID, c.Text, c.Rating, c.UID, u.Name
+        FROM Comments c
+        JOIN Users u ON c.UID = u.UID
+        WHERE c.Event_ID = ?
+        ORDER BY c.Timestamp DESC
+    ");
+    $stmt->bind_param("i", $eventID);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $comments = [];
+    while ($row = $res->fetch_assoc()) $comments[] = $row;
+    $stmt->close();
+  ?>
+
+  <div class="event-card">
+    <div style="display: flex; gap: 40px;">
+      <!-- Left: Event Info and Comment Form -->
+      <div style="flex: 1;">
+        <h3><?= htmlspecialchars($event['Event_Name']) ?> (<?= $event['Type'] ?>)</h3>
+        <p><?= htmlspecialchars($event['Description']) ?></p>
+        <p><strong>Date:</strong> <?= htmlspecialchars($event['Event_Date']) ?> | 
+           <strong>Time:</strong> <?= htmlspecialchars($event['Start_Time']) ?> - <?= htmlspecialchars($event['End_Time']) ?></p>
+           <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
+
+
+        <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+          <input type="hidden" name="event_id" value="<?= $eventID ?>">
+          <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
+          <select name="rating" required>
+            <option value="">Rate</option>
+            <?php for ($i = 1; $i <= 5; $i++): ?>
+              <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+            <?php endfor; ?>
+          </select><br>
+          <button name="submit_comment">Submit</button>
+        </form>
+      </div>
+
+      <!-- Right: Comments -->
+      <div style="flex: 1;">
+        <h4>Comments</h4>
+        <?php foreach ($comments as $c): ?>
+          <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
+            <strong><?= htmlspecialchars($c['Name']) ?></strong><br>
+            <?= str_repeat('⭐', $c['Rating']) . str_repeat('☆', 5 - $c['Rating']) ?><br>
+
+            <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
+              <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen', 'true')">
+                <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
+                <select name="rating">
+                  <?php for ($i = 1; $i <= 5; $i++): ?>
+                    <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+                  <?php endfor; ?>
+                </select><br>
+                <button name="edit_comment">Save</button>
+              </form>
+            <?php else: ?>
+              <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
+              <?php if ($c['UID'] == $_SESSION['UID']): ?>
+                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                  <button name="edit_comment">Edit</button>
+                </form>
+                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                  <button name="delete_comment">Delete</button>
+                </form>
+              <?php endif; ?>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </div>
+<?php endforeach; ?>
+
+
+
+</div>
+</div>
+</div>
+
+
+        <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD0Mkr4rl5p0wuJBe7LvHlLcX_duqvwX88&libraries=places&callback=initMap" async defer></script>
+
+
 <script>
     let map, marker, geocoder, autocomplete;
 

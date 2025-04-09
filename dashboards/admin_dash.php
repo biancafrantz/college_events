@@ -26,30 +26,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_event'])) {
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_rso'])) {
-    $rsoID = intval($_POST['rso_id']);
-
-    // Delete all associated events first
-    $conn->query("DELETE e FROM Events e JOIN RSO_Events re ON e.Event_ID = re.Event_ID WHERE re.RSO_ID = $rsoID");
-
-    // Delete from RSO_Events (in case events still exist somehow)
-    $conn->query("DELETE FROM RSO_Events WHERE RSO_ID = $rsoID");
-
-    // Delete RSO memberships
-    $conn->query("DELETE FROM RSO_Membership WHERE RSO_ID = $rsoID");
-
-    // Finally, delete the RSO itself
-    $conn->query("DELETE FROM RSOs WHERE RSO_ID = $rsoID");
-
-    header("Location: admin_dash.php?rso_deleted=1");
-    exit();
-}
-
-
-
-$eventID = 1;
-$comments = [];
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['submit_comment'])) {
         $eventID = $_POST['event_id'];
@@ -75,44 +51,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (isset($_POST['delete_comment'])) {
         $commentID = $_POST['comment_id'];
-        $stmt = $conn->prepare("DELETE FROM Comments WHERE Comment_ID = ? AND UID = ?");
-        $stmt->bind_param("ii", $commentID, $_SESSION['UID']);
+        if ($_SESSION['UserType'] === 'Admin') {
+            $stmt = $conn->prepare("DELETE FROM Comments WHERE Comment_ID = ?");
+            $stmt->bind_param("i", $commentID);
+        } else {
+            $stmt = $conn->prepare("DELETE FROM Comments WHERE Comment_ID = ? AND UID = ?");
+            $stmt->bind_param("ii", $commentID, $_SESSION['UID']);
+        }
+        
         $stmt->execute();
         $stmt->close();
     }
-
-    if (isset($_POST['delete_event'])) {
-        $eventID = intval($_POST['event_id']);
-    
-        // Delete from Event type table first
-        $conn->query("DELETE FROM Public_Events WHERE Event_ID = $eventID");
-        $conn->query("DELETE FROM Private_Events WHERE Event_ID = $eventID");
-        $conn->query("DELETE FROM RSO_Events WHERE Event_ID = $eventID");
-    
-        // Delete associated comments
-        $conn->query("DELETE FROM Comments WHERE Event_ID = $eventID");
-    
-        // Delete from main Events table
-        $conn->query("DELETE FROM Events WHERE Event_ID = $eventID");
-    
-        header("Location: admin_dash.php?event_deleted=1");
-        exit();
-    }
-    
 }
 
-$stmt = $conn->prepare("
-    SELECT c.Comment_ID, c.Text, c.Rating, c.UID, u.Name
-    FROM Comments c
-    JOIN Users u ON c.UID = u.UID
-    WHERE c.Event_ID = ?
-    ORDER BY c.Timestamp DESC
-");
-$stmt->bind_param("i", $eventID);
-$stmt->execute();
-$result = $stmt->get_result();
-while ($row = $result->fetch_assoc()) $comments[] = $row;
-$stmt->close();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_rso'])) {
+    $rsoID = intval($_POST['rso_id']);
+
+    // Delete all associated events first
+    $conn->query("DELETE e FROM Events e JOIN RSO_Events re ON e.Event_ID = re.Event_ID WHERE re.RSO_ID = $rsoID");
+
+    // Delete from RSO_Events (in case events still exist somehow)
+    $conn->query("DELETE FROM RSO_Events WHERE RSO_ID = $rsoID");
+
+    // Delete RSO memberships
+    $conn->query("DELETE FROM RSO_Membership WHERE RSO_ID = $rsoID");
+
+    // Finally, delete the RSO itself
+    $conn->query("DELETE FROM RSOs WHERE RSO_ID = $rsoID");
+
+    header("Location: admin_dash.php?rso_deleted=1");
+    exit();
+}
+
+
 
 
 // Get RSOs where this admin is a member
@@ -207,6 +179,71 @@ $rsoEventsStmt->close();
 // Merge all into one array
 $myEvents = array_merge($publicEvents, $privateEvents, $rsoEvents);
 $myCreatedEvents = $myEvents;
+
+// Get the admin's university ID
+$universityID = null;
+$univStmt = $conn->prepare("SELECT UniversityID FROM Users WHERE UID = ?");
+$univStmt->bind_param("i", $adminID);
+$univStmt->execute();
+$univStmt->bind_result($universityID);
+$univStmt->fetch();
+$univStmt->close();
+
+// Public events at the same university
+$publicEvents = [];
+$publicStmt = $conn->prepare("
+    SELECT e.*, l.address, 'Public' AS Type
+    FROM Events e
+    JOIN Public_Events p ON e.Event_ID = p.Event_ID
+    JOIN Users u ON p.Admin_ID = u.UID
+    JOIN Location l ON e.Lname = l.lname
+    WHERE u.UniversityID = ? AND e.Event_Date >= CURDATE()
+");
+$publicStmt->bind_param("i", $universityID);
+$publicStmt->execute();
+$publicEvents = $publicStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$publicStmt->close();
+
+// Private events from the same university
+$privateEvents = [];
+$privateStmt = $conn->prepare("
+    SELECT e.*, l.address, 'Private' AS Type
+    FROM Events e
+    JOIN Private_Events p ON e.Event_ID = p.Event_ID
+    JOIN Users u ON p.Admin_ID = u.UID
+    JOIN Location l ON e.Lname = l.lname
+    WHERE u.UniversityID = ? AND e.Event_Date >= CURDATE()
+");
+$privateStmt->bind_param("i", $universityID);
+$privateStmt->execute();
+$privateEvents = $privateStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$privateStmt->close();
+
+// RSO events where admin is a member
+$rsoEvents = [];
+$rsoStmt = $conn->prepare("
+    SELECT e.*, l.address, 'RSO' AS Type
+    FROM Events e
+    JOIN RSO_Events re ON e.Event_ID = re.Event_ID
+    JOIN RSO_Membership rm ON re.RSO_ID = rm.RSO_ID
+    JOIN Location l ON e.Lname = l.lname
+    WHERE rm.UID = ? AND e.Event_Date >= CURDATE()
+");
+$rsoStmt->bind_param("i", $adminID);
+$rsoStmt->execute();
+$rsoEvents = $rsoStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$rsoStmt->close();
+
+// Merge into $upcomingEvents
+$upcomingEvents = array_merge($publicEvents, $privateEvents, $rsoEvents);
+usort($upcomingEvents, function ($a, $b) {
+    return strtotime($a['Event_Date'] . ' ' . $a['Start_Time']) <=> strtotime($b['Event_Date'] . ' ' . $b['Start_Time']);
+});
+
+usort($upcomingEvents, function ($a, $b) {
+    return strtotime($a['Event_Date'] . ' ' . $a['Start_Time']) <=> strtotime($b['Event_Date'] . ' ' . $b['Start_Time']);
+});
+
 
 
 
@@ -623,105 +660,131 @@ textarea {
 </div>
 
 
-    <div id="upcoming-events" class="section" style="display:none; padding-top:20px;">
-    <div class="event-wrapper">
-    <div class="section-glass">
-      <div style="display: flex; gap: 40px;">
-        <div style="flex: 1;">
-          <h3>Upcoming Event: Innovation Kickoff</h3>
-          <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-            <input type="hidden" name="event_id" value="<?= $eventID ?>">
-            <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
-            <select name="rating" required>
-              <option value="">Rate</option>
-              <?php for ($i = 1; $i <= 5; $i++): ?>
-                <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
-              <?php endfor; ?>
-            </select><br>
-            <button name="submit_comment">Submit</button>
-          </form>
-        </div>
+<div id="upcoming-events" class="section" style="display:none; padding-top:20px;">
+<div class="event-wrapper">
+<div class="section-glass">
 
-        <div style="flex: 1;">
-          <h4>Comments</h4>
-          <?php foreach ($comments as $c): ?>
-            <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
-            <strong><?= htmlspecialchars($c['Name']) ?></strong><br>
-            <?php
-            $filled = str_repeat('⭐', $c['Rating']);
-            $empty = str_repeat('☆', 5 - $c['Rating']);
-            echo "Stars: $filled$empty";
-            ?>
+  <?php if (empty($upcomingEvents)): ?>
+    <p>No upcoming events found.</p>
+  <?php endif; ?>
 
-              <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
-                <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen', 'true')">
-                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                  <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
-                  <select name="rating">
-                    <?php for ($i = 1; $i <= 5; $i++): ?>
-                      <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
-                    <?php endfor; ?>
-                  </select><br>
-                  <button name="edit_comment">Save</button>
-                </form>
-              <?php else: ?>
-                <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
-                <?php if ($c['UID'] == $_SESSION['UID']): ?>
-                  <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-                    <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                    <button name="edit_comment">Edit</button>
-                  </form>
-                  <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
-                    <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
-                    <button name="delete_comment">Delete</button>
-                  </form>
-                <?php endif; ?>
-              <?php endif; ?>
-            </div>
-          <?php endforeach; ?>
-        </div>
+  <?php foreach ($upcomingEvents as $index => $event): ?>
+  <?php
+    $eventID = $event['Event_ID'];
+    $stmt = $conn->prepare("
+        SELECT c.Comment_ID, c.Text, c.Rating, c.UID, u.Name
+        FROM Comments c
+        JOIN Users u ON c.UID = u.UID
+        WHERE c.Event_ID = ?
+        ORDER BY c.Timestamp DESC
+    ");
+    $stmt->bind_param("i", $eventID);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $comments = [];
+    while ($row = $res->fetch_assoc()) $comments[] = $row;
+    $stmt->close();
+  ?>
+
+  <div class="event-card">
+    <div style="display: flex; gap: 40px;">
+      <!-- Left: Event Info and Comment Form -->
+      <div style="flex: 1;">
+        <h3><?= htmlspecialchars($event['Event_Name']) ?> (<?= $event['Type'] ?>)</h3>
+        <p><?= htmlspecialchars($event['Description']) ?></p>
+        <p><strong>Date:</strong> <?= htmlspecialchars($event['Event_Date']) ?> | 
+           <strong>Time:</strong> <?= htmlspecialchars($event['Start_Time']) ?> - <?= htmlspecialchars($event['End_Time']) ?></p>
+           <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
+
+
+        <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+          <input type="hidden" name="event_id" value="<?= $eventID ?>">
+          <textarea name="comment_text" placeholder="Write a comment..." required></textarea><br>
+          <select name="rating" required>
+            <option value="">Rate</option>
+            <?php for ($i = 1; $i <= 5; $i++): ?>
+              <option value="<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+            <?php endfor; ?>
+          </select><br>
+          <button name="submit_comment">Submit</button>
+        </form>
       </div>
+
+      <!-- Right: Comments -->
+      <div style="flex: 1;">
+        <h4>Comments</h4>
+        <?php foreach ($comments as $c): ?>
+          <div style="margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 6px;">
+            <strong><?= htmlspecialchars($c['Name']) ?></strong><br>
+            <?= str_repeat('⭐', $c['Rating']) . str_repeat('☆', 5 - $c['Rating']) ?><br>
+
+            <?php if ($c['UID'] == $_SESSION['UID'] && isset($_POST['edit_comment']) && $_POST['comment_id'] == $c['Comment_ID'] && !isset($_POST['comment_text'])): ?>
+              <form method="POST" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen', 'true')">
+                <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                <textarea name="comment_text"><?= htmlspecialchars($c['Text']) ?></textarea><br>
+                <select name="rating">
+                  <?php for ($i = 1; $i <= 5; $i++): ?>
+                    <option value="<?= $i ?>" <?= $i == $c['Rating'] ? 'selected' : '' ?>><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></option>
+                  <?php endfor; ?>
+                </select><br>
+                <button name="edit_comment">Save</button>
+              </form>
+            <?php else: ?>
+              <p><?= nl2br(htmlspecialchars($c['Text'])) ?></p>
+              <?php if ($c['UID'] == $_SESSION['UID']): ?>
+                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                  <button name="edit_comment">Edit</button>
+                </form>
+                <form method="POST" style="display:inline;" onsubmit="localStorage.setItem('activeTab', 'upcoming-events'); localStorage.setItem('tabOpen' , 'true')">
+                  <input type="hidden" name="comment_id" value="<?= $c['Comment_ID'] ?>">
+                  <button name="delete_comment">Delete</button>
+                </form>
+              <?php endif; ?>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </div>
+<?php endforeach; ?>
+
+<!-- View All Events -->
+<div id="view-all-events" class="section" style="display:none; padding-top:20px;">
+  <div class="event-wrapper">
+    <div class="section-glass">
+      <h3>All Events</h3>
+
+      <?php if (empty($myEvents)): ?>
+        <p>No events found.</p>
+      <?php endif; ?>
+
+      <?php foreach ($myEvents as $index => $event): ?>
+        <div class="card" onclick="toggleDetail('event<?= $index ?>-detail')">
+          <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
+          <div>
+            <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
+            <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
+          </div>
+        </div>
+        <div id="event<?= $index ?>-detail" class="detail">
+          <p><strong>Description:</strong> <?= htmlspecialchars($event['Description']) ?></p>
+          <p><strong>Starts:</strong> <?= date("g:i A", strtotime($event['Start_Time'])) ?></p>
+          <p><strong>Ends:</strong> <?= date("g:i A", strtotime($event['End_Time'])) ?></p>
+          <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
+        </div>
+      <?php endforeach; ?>
     </div>
   </div>
 </div>
 
-    <!-- View All Events Section -->
-    <div id="view-all-events" class="section">
-    <div class="event-wrapper">
-    <div class="section-glass">
-        <h3>All Events</h3>
-    
-
-    <?php if (empty($myEvents)): ?>
-        <p>No events found.</p>
-    <?php endif; ?>
-
-    <?php foreach ($myEvents as $index => $event): ?>
-        <div class="card" onclick="toggleDetail('event<?= $index ?>-detail')">
-            <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
-            <div>
-                <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
-                <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
-            </div>
-        </div>
-        <div id="event<?= $index ?>-detail" class="detail">
-            <p><strong>Description:</strong> <?= htmlspecialchars($event['Description']) ?></p>
-            <p><strong>Starts:</strong> <?= date("g:i A", strtotime($event['Start_Time'])) ?></p>
-            <p><strong>Ends:</strong> <?= date("g:i A", strtotime($event['End_Time'])) ?></p>
-            <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
-
-        </div>
-    <?php endforeach; ?>
-</div>
-</div>
-</div>
 
 
    
 <script
     src="https://maps.googleapis.com/maps/api/js?key=<?php echo getenv('GOOGLE_MAPS_API'); ?>&libraries=places&callback=initMap"
     async defer>
-</script> 
+</script>
 <script>
     let map, marker, geocoder, autocomplete;
 

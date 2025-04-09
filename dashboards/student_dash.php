@@ -39,11 +39,11 @@ $privateStmt = $conn->prepare("
     SELECT e.*, l.address, 'Private' AS Type
     FROM Events e
     JOIN Private_Events p ON e.Event_ID = p.Event_ID
+    JOIN Users u ON p.Admin_ID = u.UID
     JOIN Location l ON e.Lname = l.lname
-    WHERE p.Admin_ID = ? AND e.Event_Date >= CURDATE()
+    WHERE u.UniversityID = ? AND e.Event_Date >= CURDATE()
 ");
-
-$privateStmt->bind_param("i", $studentID);
+$privateStmt->bind_param("i", $universityID);
 $privateStmt->execute();
 $privateEvents = $privateStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $privateStmt->close();
