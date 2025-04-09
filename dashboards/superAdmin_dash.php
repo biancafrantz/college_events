@@ -551,8 +551,6 @@ $stmt->close();
                 map.setCenter(location);
                 marker.setPosition(location);
                 updateFields({ lat: location.lat(), lng: location.lng() });
-            } else {
-                alert("Could not find that university name. Try searching manually in the map.");
             }
         });
     }
