@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt->close();
 
-        // Optional: refresh page to update list
+        // refresh page to update list
         header("Location: superAdmin_dash.php");
         exit();
     }
@@ -76,8 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createUniversity'])) 
     $Longitude = floatval($_POST['longitude']);
 
     if ($Name && $Address && $Description && $_POST['NumStudents'] !== '' && $Pictures && $EmailDomain && $Latitude && $Longitude) {
-        
-        // Check for duplicate university
+       
         $checkStmt = $conn->prepare("SELECT * FROM Universities WHERE Name = ?");
         $checkStmt->bind_param("s", $Name);
         $checkStmt->execute();
@@ -86,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createUniversity'])) 
         if ($checkResult->num_rows > 0) {
             $errorMessage = "University already exists.";
         } else {
-            // Insert into Location table first
+            
             $locStmt = $conn->prepare("INSERT INTO Location (lname, address, latitude, longitude) VALUES (?, ?, ?, ?)");
             if ($locStmt) {
                 $locStmt->bind_param("ssdd", $Name, $Address, $Latitude, $Longitude);
@@ -98,7 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createUniversity'])) 
                 $errorMessage = "Location insert error: " . $conn->error;
             }
 
-            // Only insert university if location insert succeeded
             if (empty($errorMessage)) {
                 $stmt = $conn->prepare("INSERT INTO Universities (Name, Location, Description, NumStudents, Pictures, EmailDomain) VALUES (?, ?, ?, ?, ?, ?)");
                 if ($stmt) {
@@ -107,7 +105,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createUniversity'])) 
                         $newUniversityID = $stmt->insert_id;
                         $successMessage = "University successfully created.";
                     
-                        // Update users with matching email domains
                         $domainLike = '%' . '@' . $EmailDomain;
                         $updateStmt = $conn->prepare("UPDATE Users SET UniversityID = ? WHERE UniversityID IS NULL AND Email LIKE ?");
                         if ($updateStmt) {
@@ -275,7 +272,6 @@ button:hover {
 </div>
 
 
-    <!-- Create University Section -->
     <div id="createUniversity" class="section">
         <h3>Create University</h3>
         <form method="POST">
@@ -296,7 +292,6 @@ button:hover {
         <?php if ($errorMessage) echo "<p style='color:red;'>$errorMessage</p>"; ?>
     </div>
 
-    <!-- University Directory Section -->
     <div id="universityDirectory" class="section">
         <h3>University Directory</h3>
         <?php foreach ($universities as $index => $uni): ?>
@@ -316,7 +311,6 @@ button:hover {
         <?php endforeach; ?>
     </div>
 
-    <!-- Approve Events Section -->
     <div id="approveEvents" class="section">
         <h3>Approve Events</h3>
 
@@ -368,7 +362,6 @@ button:hover {
         <?php endforeach; ?>
     </div>
 
- <!-- Upcoming Events -->
  <?php
 $upcomingEvents = [];
 
@@ -421,7 +414,6 @@ $stmt->close();
 
   <div class="event-card">
     <div style="display: flex; gap: 40px;">
-      <!-- Left: Event Info and Comment Form -->
       <div style="flex: 1;">
         <h3><?= htmlspecialchars($event['Event_Name']) ?> (<?= $event['Type'] ?>)</h3>
         <p><?= htmlspecialchars($event['Description']) ?></p>
@@ -443,7 +435,6 @@ $stmt->close();
         </form>
       </div>
 
-      <!-- Right: Comments -->
       <div style="flex: 1;">
         <h4>Comments</h4>
         <?php foreach ($comments as $c): ?>
@@ -492,7 +483,7 @@ $stmt->close();
     let map, marker, geocoder, autocomplete;
 
     function initMap() {
-        const defaultLocation = { lat: 28.6024, lng: -81.2001 }; // UCF coords
+        const defaultLocation = { lat: 28.6024, lng: -81.2001 }; 
         geocoder = new google.maps.Geocoder();
 
         map = new google.maps.Map(document.getElementById("map"), {

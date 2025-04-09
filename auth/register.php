@@ -1,7 +1,7 @@
 <?php
-include '../db_connect.php'; // Include database connection
+include '../db_connect.php'; 
 
-$message = ""; // To store success or error message
+$message = ""; 
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (!empty($_POST['Name']) && !empty($_POST['Email']) && !empty($_POST['UserType']) && !empty($_POST['Password'])) {
@@ -10,15 +10,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $UserType = $_POST['UserType'];
         $Password = password_hash($_POST['Password'], PASSWORD_DEFAULT);
 
-        // Extract email domain
         $emailParts = explode('@', $Email);
         $emailDomain = isset($emailParts[1]) ? strtolower($emailParts[1]) : null;
 
-        // Default to NULL university
+     
         $universityID = null;
 
         if ($emailDomain) {
-            // Try to find matching university
+        
             $uni_stmt = $conn->prepare("SELECT UniversityID FROM Universities WHERE LOWER(EmailDomain) = ?");
             $uni_stmt->bind_param("s", $emailDomain);
             $uni_stmt->execute();
@@ -30,7 +29,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
         }
 
-        // Check if email already exists
+      
         $check_stmt = $conn->prepare("SELECT Email FROM Users WHERE Email = ?");
         $check_stmt->bind_param("s", $Email);
         $check_stmt->execute();
@@ -39,7 +38,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($check_stmt->num_rows > 0) {
             $message = "Error: This email is already registered!";
         } else {
-            // Insert user with UniversityID (can be NULL)
+         
             $stmt = $conn->prepare("INSERT INTO Users (Name, Email, UserType, Password, UniversityID) VALUES (?, ?, ?, ?, ?)");
             $stmt->bind_param("ssssi", $Name, $Email, $UserType, $Password, $universityID);
 

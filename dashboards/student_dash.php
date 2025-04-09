@@ -46,7 +46,6 @@ if ($universityID) {
 }
 
 
-// Public events from student's university
 $publicEvents = [];
 $publicStmt = $conn->prepare("
     SELECT e.*, l.address, 'Public' AS Type
@@ -62,7 +61,6 @@ $publicStmt->execute();
 $publicEvents = $publicStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $publicStmt->close();
 
-// Private events for same university
 $privateEvents = [];
 $privateStmt = $conn->prepare("
     SELECT e.*, l.address, 'Private' AS Type
@@ -77,7 +75,6 @@ $privateStmt->execute();
 $privateEvents = $privateStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $privateStmt->close();
 
-// RSO events student is part of
 $rsoEvents = [];
 $rsoStmt = $conn->prepare("
     SELECT e.*, l.address, 'RSO' AS Type
@@ -105,7 +102,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_rso'])) {
     $rsoName = trim($_POST['rso_name']);
     $description = trim($_POST['rso_description']);
 
-    // Collect all email inputs (email1, email2, email3, etc.)
     $memberEmails = [];
     foreach ($_POST as $key => $value) {
         if (preg_match('/^email\d+$/', $key) && filter_var($value, FILTER_VALIDATE_EMAIL)) {
@@ -151,7 +147,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_rso'])) {
     if (!isset($error)) {
         $adminUID = $_SESSION['UID'];
 
-        // Create the RSO with appropriate status
         $status = (count($uids) + 1) >= 5 ? 'Active' : 'Inactive';
         $insertRSO = $conn->prepare("INSERT INTO RSOs (RSO_Name, Admin_ID, Description, Status) VALUES (?, ?, ?, ?)");
         $insertRSO->bind_param("siss", $rsoName, $adminUID, $description, $status);
@@ -159,7 +154,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_rso'])) {
         if ($insertRSO->execute()) {
             $rsoID = $insertRSO->insert_id;
 
-            // Add all validated members
             foreach ($uids as $uid) {
                 $memInsert = $conn->prepare("INSERT INTO RSO_Membership (UID, RSO_ID) VALUES (?, ?)");
                 $memInsert->bind_param("ii", $uid, $rsoID);
@@ -167,16 +161,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_rso'])) {
                 $memInsert->close();
             }
 
-            // Add the creator as a member
             $creatorInsert = $conn->prepare("INSERT INTO RSO_Membership (UID, RSO_ID) VALUES (?, ?)");
             $creatorInsert->bind_param("ii", $adminUID, $rsoID);
             $creatorInsert->execute();
             $creatorInsert->close();
 
-            // Final check and update status
             updateRSOStatus($conn, $rsoID);
 
-            // Promote student to Admin if not already
             $promoteStmt = $conn->prepare("UPDATE Users SET UserType = 'Admin' WHERE UID = ? AND UserType = 'Student'");
             $promoteStmt->bind_param("i", $adminUID);
             $promoteStmt->execute();
@@ -264,7 +255,7 @@ $stmt->close();
     <a href="../auth/logout.php"><button class="logout-button">Logout</button></a>
 </div>
 
-<?php if (!empty($universityName)): ?>
+<?php if (!empty($universityName)): ?>ren@ucf.edu
     <div style="text-align: center; margin-top: 0px;">
         <p style="font-size: 32px; font-weight: 900;"><?= htmlspecialchars($universityName) ?></p>
     </div>
@@ -306,7 +297,7 @@ $stmt->close();
 
   <div class="event-card">
     <div style="display: flex; gap: 40px;">
-      <!-- Left: Event Info and Comment Form -->
+      
       <div style="flex: 1;">
         <h3><?= htmlspecialchars($event['Event_Name']) ?> (<?= $event['Type'] ?>)</h3>
         <p><?= htmlspecialchars($event['Description']) ?></p>
@@ -328,7 +319,7 @@ $stmt->close();
         </form>
       </div>
 
-      <!-- Right: Comments -->
+   
       <div style="flex: 1;">
         <h4>Comments</h4>
         <?php foreach ($comments as $c): ?>

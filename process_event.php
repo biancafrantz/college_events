@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insertLoc->execute();
         }
 
-        // Insert into Events table (now includes Contact_Email and Contact_Phone)
+      
         $eventStmt = $conn->prepare("
             INSERT INTO Events (Event_Name, Description, Event_Date, Start_Time, End_Time, lname, Contact_Email, Contact_Phone)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)

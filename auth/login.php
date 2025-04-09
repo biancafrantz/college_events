@@ -14,7 +14,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $stmt->execute();
     $stmt->store_result();
 
-    if ($stmt->num_rows > 0) {  // Move fetch inside this block
+    if ($stmt->num_rows > 0) {  
         $stmt->bind_result($UID, $HashedPassword, $UserType, $EmailFetched);
         $stmt->fetch();
 
@@ -23,10 +23,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $_SESSION['UserType'] = $UserType;
             $_SESSION['Email'] = $EmailFetched;
 
-            // Debug output to confirm before redirect
+           
             echo "Redirecting UserType: $UserType...<br>";
 
-            // Redirect based on UserType
+     
             if ($UserType === 'SuperAdmin') {
                 header("Location: ../dashboards/superAdmin_dash.php");
             } elseif ($UserType === 'Admin') {

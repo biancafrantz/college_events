@@ -83,16 +83,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_rso'])) {
     $rsoID = intval($_POST['rso_id']);
 
-    // Delete all associated events first
     $conn->query("DELETE e FROM Events e JOIN RSO_Events re ON e.Event_ID = re.Event_ID WHERE re.RSO_ID = $rsoID");
 
-    // Delete from RSO_Events (in case events still exist somehow)
     $conn->query("DELETE FROM RSO_Events WHERE RSO_ID = $rsoID");
 
-    // Delete RSO memberships
     $conn->query("DELETE FROM RSO_Membership WHERE RSO_ID = $rsoID");
 
-    // Finally, delete the RSO itself
     $conn->query("DELETE FROM RSOs WHERE RSO_ID = $rsoID");
 
     header("Location: admin_dash.php?rso_deleted=1");
@@ -153,7 +149,6 @@ if (isset($_POST['delete_member'])) {
     updateRSOStatus($conn, $rsoID);
 }
 
-// Get RSOs where this admin is a member
 $rsos_query = $conn->prepare("
     SELECT RSO_ID, RSO_Name, Description, Status
     FROM RSOs
@@ -210,7 +205,6 @@ $email_result = $email_query->get_result();
 $email_row = $email_result->fetch_assoc();
 $adminEmail = $email_row['Email'];
 
-// Get Public Events created by this admin
 $publicEventsStmt = $conn->prepare("
     SELECT e.*, l.address, 'Public' AS Type
 FROM Events e
@@ -224,7 +218,6 @@ $publicResult = $publicEventsStmt->get_result();
 $publicEvents = $publicResult->fetch_all(MYSQLI_ASSOC);
 $publicEventsStmt->close();
 
-// Get Private Events created by this admin
 $privateEventsStmt = $conn->prepare("
     SELECT e.*, l.address, 'Private' AS Type
 FROM Events e
@@ -238,7 +231,6 @@ $privateResult = $privateEventsStmt->get_result();
 $privateEvents = $privateResult->fetch_all(MYSQLI_ASSOC);
 $privateEventsStmt->close();
 
-// Get RSO Events managed by this admin
 $rsoEventsStmt = $conn->prepare("
     SELECT e.*, l.address, 'RSO' AS Type
 FROM Events e
@@ -253,11 +245,9 @@ $rsoResult = $rsoEventsStmt->get_result();
 $rsoEvents = $rsoResult->fetch_all(MYSQLI_ASSOC);
 $rsoEventsStmt->close();
 
-// Merge all into one array
 $myEvents = array_merge($publicEvents, $privateEvents, $rsoEvents);
 $myCreatedEvents = $myEvents;
 
-// Get the admin's university ID
 $universityID = null;
 $univStmt = $conn->prepare("SELECT UniversityID FROM Users WHERE UID = ?");
 $univStmt->bind_param("i", $adminID);
@@ -266,7 +256,6 @@ $univStmt->bind_result($universityID);
 $univStmt->fetch();
 $univStmt->close();
 
-// Public events at the same university
 $publicEvents = [];
 $publicStmt = $conn->prepare("
     SELECT e.*, l.address, 'Public' AS Type
@@ -281,7 +270,6 @@ $publicStmt->execute();
 $publicEvents = $publicStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $publicStmt->close();
 
-// Private events from the same university
 $privateEvents = [];
 $privateStmt = $conn->prepare("
     SELECT e.*, l.address, 'Private' AS Type
@@ -296,7 +284,6 @@ $privateStmt->execute();
 $privateEvents = $privateStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $privateStmt->close();
 
-// RSO events where admin is a member
 $rsoEvents = [];
 $rsoStmt = $conn->prepare("
     SELECT e.*, l.address, 'RSO' AS Type
@@ -311,7 +298,6 @@ $rsoStmt->execute();
 $rsoEvents = $rsoStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $rsoStmt->close();
 
-// Merge into $upcomingEvents
 $upcomingEvents = array_merge($publicEvents, $privateEvents, $rsoEvents);
 usort($upcomingEvents, function ($a, $b) {
     return strtotime($a['Event_Date'] . ' ' . $a['Start_Time']) <=> strtotime($b['Event_Date'] . ' ' . $b['Start_Time']);
@@ -459,7 +445,7 @@ select {
 }
 
 textarea {
-    height: 40px; /* Match the height of adjacent inputs */
+    height: 40px; 
     resize: vertical;
 }
 
@@ -899,7 +885,7 @@ textarea {
     let map, marker, geocoder, autocomplete;
 
     function initMap() {
-        const defaultLocation = { lat: 28.6024, lng: -81.2001 }; // UCF coords
+        const defaultLocation = { lat: 28.6024, lng: -81.2001 }; 
         geocoder = new google.maps.Geocoder();
 
         map = new google.maps.Map(document.getElementById("map"), {
