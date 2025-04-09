@@ -9,22 +9,6 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Admin') {
 
 $adminID = $_SESSION['UID'];
 
-function updateRSOStatus($conn, $rsoID) {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM RSO_Membership WHERE RSO_ID = ?");
-    $stmt->bind_param("i", $rsoID);
-    $stmt->execute();
-    $stmt->bind_result($count);
-    $stmt->fetch();
-    $stmt->close();
-
-    $status = $count >= 5 ? 'Active' : 'Inactive';
-    $update = $conn->prepare("UPDATE RSOs SET Status = ? WHERE RSO_ID = ?");
-    $update->bind_param("si", $status, $rsoID);
-    $update->execute();
-    $update->close();
-}
-
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_event'])) {
     $eventID = intval($_POST['event_id']);
     $name = trim($_POST['event_name']);
@@ -99,67 +83,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_rso'])) {
     header("Location: admin_dash.php?rso_deleted=1");
     exit();
 }
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_member'])) {
-    $rsoID = intval($_POST['rso_id']);
-    $uid = intval($_POST['uid']);
-
-    $stmt = $conn->prepare("DELETE FROM RSO_Membership WHERE UID = ? AND RSO_ID = ?");
-    $stmt->bind_param("ii", $uid, $rsoID);
-    $stmt->execute();
-    $stmt->close();
-
-    updateRSOStatus($conn, $rsoID);
-    header("Location: admin_dash.php?member_removed=1");
-    exit();
-}
-
-
-if (isset($_POST['add_member'])) {
-    $email = trim($_POST['new_member_email']);
-    $rsoID = intval($_POST['rso_id']);
-
-    $stmt = $conn->prepare("SELECT UID, UserType, UniversityID FROM Users WHERE Email = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $stmt->bind_result($uid, $type, $univ);
-    if ($stmt->fetch() && $type === 'Student') {
-        $stmt->close();
-
-        $already = $conn->prepare("SELECT 1 FROM RSO_Membership WHERE UID = ? AND RSO_ID = ?");
-        $already->bind_param("ii", $uid, $rsoID);
-        $already->execute();
-        $already->store_result();
-
-        if ($already->num_rows === 0) {
-            $add = $conn->prepare("INSERT INTO RSO_Membership (UID, RSO_ID) VALUES (?, ?)");
-            $add->bind_param("ii", $uid, $rsoID);
-            $add->execute();
-            $add->close();
-            updateRSOStatus($conn, $rsoID);
-        }
-        $already->close();
-    } else {
-        $stmt->close();
-    }
-}
-
-if (isset($_POST['delete_member'])) {
-    $uid = intval($_POST['uid']);
-    $rsoID = intval($_POST['rso_id']);
-    $del = $conn->prepare("DELETE FROM RSO_Membership WHERE UID = ? AND RSO_ID = ?");
-    $del->bind_param("ii", $uid, $rsoID);
-    $del->execute();
-    $del->close();
-    updateRSOStatus($conn, $rsoID);
-}
-
 
 
 
 
 // Get RSOs where this admin is a member
 $rsos_query = $conn->prepare("
-    SELECT RSO_ID, RSO_Name, Description, Status
+    SELECT RSO_ID, RSO_Name, Description
     FROM RSOs
     WHERE Admin_ID = ?
 ");
@@ -173,7 +103,7 @@ while ($row = $rsos_result->fetch_assoc()) {
     $rsoID = $row['RSO_ID'];
 
     $members_query = $conn->prepare("
-SELECT U.UID, U.Email
+        SELECT U.Email
         FROM Users U
         JOIN RSO_Membership M ON U.UID = M.UID
         WHERE M.RSO_ID = ?
@@ -184,26 +114,17 @@ SELECT U.UID, U.Email
 
     $members = [];
     while ($m = $members_result->fetch_assoc()) {
-        $members[$m['UID']] = $m['Email'];
+        $members[] = $m['Email'];
     }
-    
 
     $row['Members'] = $members;
     $rsos[] = $row;
 }
 
-$allRsoStmt = $conn->prepare("SELECT RSO_ID, RSO_Name, Admin_ID FROM RSOs");
-$allRsoStmt->execute();
-$allRsos = $allRsoStmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$allRsoStmt->close();
-
 $rsoOptions = '';
-foreach ($allRsos as $rso) {
-    $label = htmlspecialchars($rso['RSO_Name']);
-    $selected = isset($_POST['rso']) && $_POST['rso'] == $rso['RSO_ID'] ? 'selected' : '';
-    $rsoOptions .= "<option value='{$rso['RSO_ID']}' $selected data-admin='{$rso['Admin_ID']}'>$label</option>";
+foreach ($rsos as $rso) {
+    $rsoOptions .= "<option value='{$rso['RSO_ID']}'>" . htmlspecialchars($rso['RSO_Name']) . "</option>";
 }
-
 
 $email_query = $conn->prepare("SELECT Email FROM Users WHERE UID = ?");
 $email_query->bind_param("i", $adminID);
@@ -569,6 +490,24 @@ textarea {
   </script>
 <?php endif; ?>
 
+<?php if (isset($_GET['event_status']) && $_GET['event_status'] === 'duplicate'): ?>
+  <div id="event-duplicate-msg" style="background-color: #f8d7da; color: #721c24; padding: 12px 20px; border-radius: 8px; border: 1px solid #f5c6cb; margin-bottom: 20px; text-align: center;">
+    ⚠️ Cannot create event: another event already exists at the same location, date, and time.
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const msg = document.getElementById('event-duplicate-msg');
+      if (msg) {
+        setTimeout(() => {
+          msg.style.display = 'none';
+          const url = new URL(window.location);
+          url.searchParams.delete('event_status');
+          window.history.replaceState({}, document.title, url.toString());
+        }, 5000);
+      }
+    });
+  </script>
+<?php endif; ?>
 
 <?php if (isset($_GET['event_deleted']) && $_GET['event_deleted'] == 1): ?>
   <div id="event-deleted-msg" style="background-color: #cde9da; color: #c3cde9; padding: 12px 20px; border-radius: 8px; border: 1px solid #f5c6cb; margin-bottom: 20px; text-align: center;">
@@ -650,9 +589,9 @@ textarea {
 
         <input id="address" type="text" placeholder="Address" name="address">
         <label style="display: flex; align-items: center; gap: 8px;">
-  <input type="checkbox" id="roomToggle" onchange="toggleRoomInput()"> Include Room Number
-</label>
-<input id="room_number" type="text" name="room_number" placeholder="Room Number" style="display:none;">
+          <input type="checkbox" id="roomToggle" onchange="toggleRoomInput()"> Include Room Number
+        </label>
+        <input id="room_number" type="text" name="room_number" placeholder="Room Number" style="display:none;">
 
         <input id="latitude" type="text" placeholder="Latitude" name="latitude">
         <input id="longitude" type="text" placeholder="Longitude" name="longitude">
@@ -675,7 +614,6 @@ textarea {
 
     <?php foreach ($myCreatedEvents as $index => $event): ?>
         <div class="card" onclick="toggleDetail('manage-event<?= $index ?>')">
-            <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
             <div>
                 <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
                 <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
@@ -692,27 +630,26 @@ textarea {
                 <label>End Time: <input type="time" name="end_time" value="<?= $event['End_Time'] ?>"></label><br>
                 <button type="submit" name="update_event">Save Changes</button>
                 <form method="POST" onsubmit="return confirm('Are you sure you want to delete this event?');">
-    <input type="hidden" name="event_id" value="<?= $event['Event_ID'] ?>">
-    <button type="submit" name="delete_event" style="background-color: #c0392b; color: white;">Delete Event</button>
-</form>
+                <input type="hidden" name="event_id" value="<?= $event['Event_ID'] ?>">
+                <button type="submit" name="delete_event" style="background-color: #c0392b; color: white;">Delete Event</button>
+            </form>
 
             </form>
         </div>
     <?php endforeach; ?>
-</div>
-</div>
-</div>
+  </div>
+  </div>
+  </div>
 
 
     <!-- Manage RSOs Section -->
     <div id="manage-rsos" class="section">
-  <div class="event-wrapper">
+    <div class="event-wrapper">
     <div class="section-glass">
       <h3>Manage My RSOs</h3>
 
       <?php foreach ($rsos as $rso): ?>
         <div class="card" onclick="toggleDetail('rso-detail-<?= $rso['RSO_ID'] ?>')">
-          <img src="https://via.placeholder.com/120x80?text=<?= urlencode($rso['RSO_Name']) ?>" class="card-image">
           <div>
             <h4><?= htmlspecialchars($rso['RSO_Name']) ?></h4>
             <p>You are the admin</p>
@@ -721,30 +658,11 @@ textarea {
         <div id="rso-detail-<?= $rso['RSO_ID'] ?>" class="detail">
           <p><strong>Description:</strong> <?= htmlspecialchars($rso['Description'] ?? '') ?>
           </p>
-          <p><strong>Status:</strong> <?= htmlspecialchars($rso['Status']) ?></p>
           <h4>Members</h4>
           <ul>
-  <?php foreach ($rso['Members'] as $uid => $email): ?>
-    <li>
-      <?= htmlspecialchars($email) ?>
-      <form method="POST" style="display:inline;" onsubmit="return confirm('Remove this member?')">
-        <input type="hidden" name="rso_id" value="<?= $rso['RSO_ID'] ?>">
-        <input type="hidden" name="uid" value="<?= $uid ?>">
-        <button type="submit" name="delete_member" style="background-color:#c0392b; color:white;">Delete</button>
-      </form>
-    </li>
-  <?php endforeach; ?>
-</ul>
-
-<form method="POST">
-  <input type="hidden" name="rso_id" value="<?= $rso['RSO_ID'] ?>">
-  <input type="email" name="new_member_email" placeholder="Add member email" <?= count($rso['Members']) >= 5 ? 'disabled' : '' ?>>
-  <button type="submit" name="add_member" <?= count($rso['Members']) >= 5 ? 'disabled' : '' ?>>Add Member</button>
-  <?php if ($rso['Status'] === 'Active'): ?>
-    <span style="color:rgb(0, 0, 0); margin-left: 10px;">There are already 5 members</span>
-  <?php endif; ?>
-</form>
-
+            <?php foreach ($rso['Members'] as $email): ?>
+              <li><?= htmlspecialchars($email) ?></li>
+            <?php endforeach; ?>
           </ul>
           <form method="POST" onsubmit="return confirm('Are you sure you want to delete this RSO and all its data?');">
     <input type="hidden" name="rso_id" value="<?= $rso['RSO_ID'] ?>">
@@ -859,7 +777,6 @@ textarea {
 
       <?php foreach ($myEvents as $index => $event): ?>
         <div class="card" onclick="toggleDetail('event<?= $index ?>-detail')">
-          <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
           <div>
             <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
             <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
@@ -880,6 +797,7 @@ textarea {
 
    
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD0Mkr4rl5p0wuJBe7LvHlLcX_duqvwX88&libraries=places&callback=initMap" async defer></script>
+
 <script>
     let map, marker, geocoder, autocomplete;
 
@@ -983,21 +901,6 @@ textarea {
       }, 4000);
     }
   });
-</script>
-<script>
-document.querySelector('form[action="../process_event.php"]').addEventListener('submit', function(e) {
-  const type = document.getElementById('eventType').value;
-  if (type === 'rso') {
-    const select = document.getElementById('rso');
-    const selectedOption = select.options[select.selectedIndex];
-    const selectedAdmin = selectedOption.getAttribute('data-admin');
-    const currentAdmin = <?= json_encode($adminID) ?>;
-    if (parseInt(selectedAdmin) !== currentAdmin) {
-      e.preventDefault();
-      alert("You are not the admin of this RSO.");
-    }
-  }
-});
 </script>
 
 </body>
