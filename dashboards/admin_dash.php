@@ -10,20 +10,19 @@ if (!isset($_SESSION['UID']) || $_SESSION['UserType'] !== 'Admin') {
 $adminID = $_SESSION['UID'];
 
 function updateRSOStatus($conn, $rsoID) {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM RSO_Membership WHERE RSO_ID = ?");
-    $stmt->bind_param("i", $rsoID);
-    $stmt->execute();
-    $stmt->bind_result($count);
-    $stmt->fetch();
-    $stmt->close();
+  $stmt = $conn->prepare("SELECT COUNT(*) FROM RSO_Membership WHERE RSO_ID = ?");
+  $stmt->bind_param("i", $rsoID);
+  $stmt->execute();
+  $stmt->bind_result($count);
+  $stmt->fetch();
+  $stmt->close();
 
-    $status = $count >= 5 ? 'Active' : 'Inactive';
-    $update = $conn->prepare("UPDATE RSOs SET Status = ? WHERE RSO_ID = ?");
-    $update->bind_param("si", $status, $rsoID);
-    $update->execute();
-    $update->close();
+  $status = $count >= 5 ? 'Active' : 'Inactive';
+  $update = $conn->prepare("UPDATE RSOs SET Status = ? WHERE RSO_ID = ?");
+  $update->bind_param("si", $status, $rsoID);
+  $update->execute();
+  $update->close();
 }
-
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_event'])) {
     $eventID = intval($_POST['event_id']);
@@ -99,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_rso'])) {
     header("Location: admin_dash.php?rso_deleted=1");
     exit();
 }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_member'])) {
     $rsoID = intval($_POST['rso_id']);
     $uid = intval($_POST['uid']);
@@ -153,16 +153,13 @@ if (isset($_POST['delete_member'])) {
     updateRSOStatus($conn, $rsoID);
 }
 
-
-
-
-
 // Get RSOs where this admin is a member
 $rsos_query = $conn->prepare("
     SELECT RSO_ID, RSO_Name, Description, Status
     FROM RSOs
     WHERE Admin_ID = ?
 ");
+
 
 $rsos_query->bind_param("i", $adminID);
 $rsos_query->execute();
@@ -173,11 +170,12 @@ while ($row = $rsos_result->fetch_assoc()) {
     $rsoID = $row['RSO_ID'];
 
     $members_query = $conn->prepare("
-SELECT U.UID, U.Email
-        FROM Users U
-        JOIN RSO_Membership M ON U.UID = M.UID
-        WHERE M.RSO_ID = ?
-    ");
+    SELECT U.UID, U.Email
+    FROM Users U
+    JOIN RSO_Membership M ON U.UID = M.UID
+    WHERE M.RSO_ID = ?
+");
+
     $members_query->bind_param("i", $rsoID);
     $members_query->execute();
     $members_result = $members_query->get_result();
@@ -544,7 +542,7 @@ textarea {
   <button class="toggle" onclick="toggleSection('manage-events')">Manage My Events</button>
   <button class="toggle" onclick="toggleSection('manage-rsos')">Manage My RSOs</button>
   <button class="toggle" onclick="toggleSection('upcoming-events')">Upcoming Events</button>
-  <button class="toggle" onclick="toggleSection('view-all-events')">View All My Events</button>
+  <button class="toggle" onclick="toggleSection('view-all-events')">View All Events</button>
  
 
 
@@ -569,6 +567,24 @@ textarea {
   </script>
 <?php endif; ?>
 
+<?php if (isset($_GET['event_status']) && $_GET['event_status'] === 'duplicate'): ?>
+  <div id="event-duplicate-msg" style="background-color: #f8d7da; color: #721c24; padding: 12px 20px; border-radius: 8px; border: 1px solid #f5c6cb; margin-bottom: 20px; text-align: center;">
+    ⚠️ Cannot create event: another event already exists at the same location, date, and time.
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const msg = document.getElementById('event-duplicate-msg');
+      if (msg) {
+        setTimeout(() => {
+          msg.style.display = 'none';
+          const url = new URL(window.location);
+          url.searchParams.delete('event_status');
+          window.history.replaceState({}, document.title, url.toString());
+        }, 5000);
+      }
+    });
+  </script>
+<?php endif; ?>
 
 <?php if (isset($_GET['event_deleted']) && $_GET['event_deleted'] == 1): ?>
   <div id="event-deleted-msg" style="background-color: #cde9da; color: #c3cde9; padding: 12px 20px; border-radius: 8px; border: 1px solid #f5c6cb; margin-bottom: 20px; text-align: center;">
@@ -640,7 +656,7 @@ textarea {
           </label>
         </div>
 
-        <input type="email" name="contact_email" value="<?= htmlspecialchars($adminEmail, ENT_QUOTES, 'UTF-8'); ?>" readonly>
+        <input type="email" name="contact_email" value="<?= htmlspecialchars($adminEmail, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Contact Email" required>
         <input type="text" placeholder="Contact Phone" name="phone">
 
         <h4>Select Location</h4>
@@ -650,9 +666,9 @@ textarea {
 
         <input id="address" type="text" placeholder="Address" name="address">
         <label style="display: flex; align-items: center; gap: 8px;">
-  <input type="checkbox" id="roomToggle" onchange="toggleRoomInput()"> Include Room Number
-</label>
-<input id="room_number" type="text" name="room_number" placeholder="Room Number" style="display:none;">
+          <input type="checkbox" id="roomToggle" onchange="toggleRoomInput()"> Include Room Number
+        </label>
+        <input id="room_number" type="text" name="room_number" placeholder="Room Number" style="display:none;">
 
         <input id="latitude" type="text" placeholder="Latitude" name="latitude">
         <input id="longitude" type="text" placeholder="Longitude" name="longitude">
@@ -675,7 +691,6 @@ textarea {
 
     <?php foreach ($myCreatedEvents as $index => $event): ?>
         <div class="card" onclick="toggleDetail('manage-event<?= $index ?>')">
-            <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
             <div>
                 <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
                 <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
@@ -692,20 +707,20 @@ textarea {
                 <label>End Time: <input type="time" name="end_time" value="<?= $event['End_Time'] ?>"></label><br>
                 <button type="submit" name="update_event">Save Changes</button>
                 <form method="POST" onsubmit="return confirm('Are you sure you want to delete this event?');">
-    <input type="hidden" name="event_id" value="<?= $event['Event_ID'] ?>">
-    <button type="submit" name="delete_event" style="background-color: #c0392b; color: white;">Delete Event</button>
-</form>
+                <input type="hidden" name="event_id" value="<?= $event['Event_ID'] ?>">
+                <button type="submit" name="delete_event" style="background-color: #c0392b; color: white;">Delete Event</button>
+            </form>
 
             </form>
         </div>
     <?php endforeach; ?>
-</div>
-</div>
-</div>
+  </div>
+  </div>
+  </div>
 
 
-    <!-- Manage RSOs Section -->
-    <div id="manage-rsos" class="section">
+   <!-- Manage RSOs Section -->
+   <div id="manage-rsos" class="section">
   <div class="event-wrapper">
     <div class="section-glass">
       <h3>Manage My RSOs</h3>
@@ -757,8 +772,6 @@ textarea {
   </div>
 </div>
 
-
-<!-- Upcoming Events -->
 <div id="upcoming-events" class="section" style="display:none; padding-top:20px;">
   <div class="event-wrapper">
     <div class="section-glass">
@@ -860,7 +873,6 @@ textarea {
 
       <?php foreach ($myEvents as $index => $event): ?>
         <div class="card" onclick="toggleDetail('event<?= $index ?>-detail')">
-          <img src="https://via.placeholder.com/120x80?text=<?= urlencode($event['Event_Name']) ?>" class="card-image">
           <div>
             <h4><?= htmlspecialchars($event['Event_Name']) ?></h4>
             <p><?= htmlspecialchars($event['Type']) ?> – <?= date("F j, Y", strtotime($event['Event_Date'])) ?></p>
@@ -871,6 +883,8 @@ textarea {
           <p><strong>Starts:</strong> <?= date("g:i A", strtotime($event['Start_Time'])) ?></p>
           <p><strong>Ends:</strong> <?= date("g:i A", strtotime($event['End_Time'])) ?></p>
           <p><strong>Location:</strong> <?= htmlspecialchars($event['address']) ?></p>
+          <p><strong>Contact Email:</strong> <?= htmlspecialchars($event['Contact_Email']) ?></p>
+          <p><strong>Contact Phone:</strong> <?= htmlspecialchars($event['Contact_Phone']) ?></p>
         </div>
       <?php endforeach; ?>
     </div>
@@ -879,9 +893,9 @@ textarea {
 
 
 
-
    
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD0Mkr4rl5p0wuJBe7LvHlLcX_duqvwX88&libraries=places&callback=initMap" async defer></script>
+
 <script>
     let map, marker, geocoder, autocomplete;
 
@@ -986,6 +1000,7 @@ textarea {
     }
   });
 </script>
+
 <script>
 document.querySelector('form[action="../process_event.php"]').addEventListener('submit', function(e) {
   const type = document.getElementById('eventType').value;
@@ -1001,6 +1016,7 @@ document.querySelector('form[action="../process_event.php"]').addEventListener('
   }
 });
 </script>
+
 
 </body>
 </html>
